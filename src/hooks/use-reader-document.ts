@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { ReaderDocument } from '@/types/document';
+import type { DocumentMetadataInput } from '@/types/document-metadata';
 import { loadDocument, listDocuments, saveDocument } from '@/lib/reader-storage';
-import { parseFileToHtml, getFileExtension } from '@/lib/file-parsers';
+import { saveDocumentMetadata } from '@/lib/document-metadata-store';
+import { parseFileToHtml } from '@/lib/file-parsers';
 
 export const useReaderDocument = (id: string | null) => {
   const [document, setDocument] = useState<ReaderDocument | null>(null);
@@ -49,14 +51,30 @@ const readFileAsText = (file: File): Promise<string> => {
 };
 
 export const useDocumentUpload = () => {
-  const uploadDocument = useCallback(async (file: File): Promise<ReaderDocument> => {
-    const content = await readFileAsText(file);
-    const ext = getFileExtension(file.name);
-    const title = file.name.replace(new RegExp(`\\${ext}$`, 'i'), '');
-    const htmlContent = parseFileToHtml(file.name, content);
+  const uploadDocument = useCallback(
+    async (file: File, metadata: DocumentMetadataInput): Promise<ReaderDocument> => {
+      const content = await readFileAsText(file);
+      const htmlContent = parseFileToHtml(file.name, content);
 
-    return saveDocument({ title, author: '', htmlContent });
-  }, []);
+      const doc = await saveDocument({ title: metadata.title, author: metadata.author, htmlContent });
+      await saveDocumentMetadata(doc.id, metadata);
 
-  return { uploadDocument };
+      return doc;
+    },
+    []
+  );
+
+  const uploadFromText = useCallback(
+    async (text: string, metadata: DocumentMetadataInput): Promise<ReaderDocument> => {
+      const htmlContent = `<pre>${text}</pre>`;
+
+      const doc = await saveDocument({ title: metadata.title, author: metadata.author, htmlContent });
+      await saveDocumentMetadata(doc.id, metadata);
+
+      return doc;
+    },
+    []
+  );
+
+  return { uploadDocument, uploadFromText };
 };

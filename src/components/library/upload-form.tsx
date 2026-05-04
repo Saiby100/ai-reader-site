@@ -2,7 +2,9 @@
 
 import { useState, useRef } from 'react';
 import { useDocumentUpload } from '@/hooks/use-reader-document';
-import { getSupportedAcceptString } from '@/lib/file-parsers';
+import { getSupportedAcceptString, getFileExtension } from '@/lib/file-parsers';
+
+type UploadMode = 'file' | 'text';
 
 type UploadFormProps = {
   /** Called after a document is successfully uploaded */
@@ -12,19 +14,47 @@ type UploadFormProps = {
 const UploadForm = ({ onUploadComplete }: UploadFormProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [mode, setMode] = useState<UploadMode>('file');
+  const [title, setTitle] = useState('');
+  const [author, setAuthor] = useState('');
+  const [tagsInput, setTagsInput] = useState('');
+  const [pastedText, setPastedText] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { uploadDocument } = useDocumentUpload();
+  const { uploadDocument, uploadFromText } = useDocumentUpload();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && !title) {
+      const ext = getFileExtension(file.name);
+      setTitle(file.name.replace(new RegExp(`\\${ext}$`, 'i'), ''));
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const file = fileInputRef.current?.files?.[0];
-    if (!file) return;
+
+    const tags = tagsInput
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
 
     setIsUploading(true);
     try {
-      await uploadDocument(file);
+      if (mode === 'file') {
+        const file = fileInputRef.current?.files?.[0];
+        if (!file) return;
+        await uploadDocument(file, { title, author, tags });
+      } else {
+        if (!pastedText.trim()) return;
+        await uploadFromText(pastedText, { title, author, tags });
+      }
+
       onUploadComplete();
       setIsOpen(false);
+      setTitle('');
+      setAuthor('');
+      setTagsInput('');
+      setPastedText('');
       if (fileInputRef.current) fileInputRef.current.value = '';
     } finally {
       setIsUploading(false);
@@ -44,24 +74,80 @@ const UploadForm = ({ onUploadComplete }: UploadFormProps) => {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded border border-gray-200 p-4 dark:border-gray-700">
+      <div className="flex gap-2 text-sm">
+        <button
+          type="button"
+          onClick={() => setMode('file')}
+          className={`rounded px-3 py-1 ${mode === 'file' ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900' : 'border border-gray-300 dark:border-gray-700'}`}
+        >
+          File
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('text')}
+          className={`rounded px-3 py-1 ${mode === 'text' ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900' : 'border border-gray-300 dark:border-gray-700'}`}
+        >
+          Paste Text
+        </button>
+      </div>
+
+      {mode === 'file' ? (
+        <div>
+          <label className="block text-sm mb-1">File</label>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={getSupportedAcceptString()}
+            required
+            onChange={handleFileChange}
+            className="text-sm"
+          />
+        </div>
+      ) : (
+        <div>
+          <label className="block text-sm mb-1">Content</label>
+          <textarea
+            value={pastedText}
+            onChange={(e) => setPastedText(e.target.value)}
+            required
+            placeholder="Paste your text here..."
+            rows={6}
+            className="w-full rounded border border-gray-200 px-2 py-1 text-sm dark:border-gray-700 dark:bg-transparent"
+          />
+        </div>
+      )}
+
       <div>
-        <label className="block text-sm mb-1">File</label>
+        <label className="block text-sm mb-1">Title</label>
         <input
-          ref={fileInputRef}
-          type="file"
-          accept={getSupportedAcceptString()}
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
           required
-          className="text-sm"
+          placeholder="Document title"
+          className="w-full rounded border border-gray-200 px-2 py-1 text-sm dark:border-gray-700 dark:bg-transparent"
         />
       </div>
 
       <div>
-        <label className="block text-sm mb-1 text-gray-400">Tags (coming soon)</label>
+        <label className="block text-sm mb-1">Author</label>
         <input
           type="text"
-          disabled
-          placeholder="Tags will be assignable here"
-          className="w-full rounded border border-gray-200 px-2 py-1 text-sm disabled:opacity-50 dark:border-gray-700"
+          value={author}
+          onChange={(e) => setAuthor(e.target.value)}
+          placeholder="Author name"
+          className="w-full rounded border border-gray-200 px-2 py-1 text-sm dark:border-gray-700 dark:bg-transparent"
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm mb-1">Tags</label>
+        <input
+          type="text"
+          value={tagsInput}
+          onChange={(e) => setTagsInput(e.target.value)}
+          placeholder="Comma-separated tags"
+          className="w-full rounded border border-gray-200 px-2 py-1 text-sm dark:border-gray-700 dark:bg-transparent"
         />
       </div>
 
