@@ -49,8 +49,10 @@ const ReaderPageContent = () => {
           <ReaderDrawerToggle isOpen={drawerOpen} onToggle={() => setDrawerOpen(!drawerOpen)} />
         </div>
       </div>
-      <ReaderContent htmlContent={document.htmlContent} />
-      <ReaderDrawer isOpen={drawerOpen} />
+      <div className="flex flex-1 overflow-hidden">
+        <ReaderContent htmlContent={document.htmlContent} />
+        <ReaderDrawer isOpen={drawerOpen} documentId={document.id} />
+      </div>
     </div>
   );
 };

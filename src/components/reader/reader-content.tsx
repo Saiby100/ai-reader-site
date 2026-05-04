@@ -7,7 +7,7 @@ type ReaderContentProps = {
 
 export const ReaderContent = ({ htmlContent }: ReaderContentProps) => {
   return (
-    <main className="flex-1 overflow-y-auto px-6 py-4">
+    <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-6 py-4">
       <div
         className="mx-auto max-w-3xl"
         dangerouslySetInnerHTML={{ __html: htmlContent }}
