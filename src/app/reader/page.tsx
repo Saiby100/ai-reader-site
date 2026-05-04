@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useReaderDocument } from '@/hooks/use-reader-document';
-import { useMarkDocumentViewed } from '@/hooks/use-document-metadata';
+import { markDocumentViewedAction } from '@/actions/document-metadata-actions';
 import { ReaderHeader } from '@/components/reader/reader-header';
 import { ReaderContent } from '@/components/reader/reader-content';
 import { ReaderDrawer } from '@/components/reader/reader-drawer';
@@ -14,14 +14,13 @@ const ReaderPageContent = () => {
   const searchParams = useSearchParams();
   const id = searchParams.get('id');
   const { document, isLoading } = useReaderDocument(id);
-  const { markViewed } = useMarkDocumentViewed();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
     if (document?.id) {
-      markViewed(document.id);
+      markDocumentViewedAction(document.id);
     }
-  }, [document?.id, markViewed]);
+  }, [document?.id]);
 
   if (isLoading) {
     return (

@@ -1,15 +1,4 @@
-/** Represents a user action stamp with actor and time */
-export type Stamp = {
-  /** The user who performed the action */
-  user: {
-    /** Unique user identifier */
-    id: string;
-    /** Display name of the user */
-    name: string;
-  };
-  /** When the action occurred */
-  timestamp: Date;
-};
+import type { Stamp } from '@/types/stamp';
 
 /** Metadata record stored in the document database */
 export type DocumentMetadata = {
@@ -22,11 +11,11 @@ export type DocumentMetadata = {
   /** User-assigned classification tags */
   tags: string[];
   /** When the document was first created/uploaded */
-  createdStamp: Stamp;
+  created: Stamp;
   /** When the metadata was last modified */
-  updatedStamp: Stamp;
+  updated: Stamp;
   /** When the document was last opened for reading */
-  viewedStamp: Stamp | null;
+  viewed: Stamp | null;
 };
 
 /** Fields the user provides when uploading a new document */

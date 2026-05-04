@@ -1,27 +1,21 @@
 import Link from 'next/link';
-import type { ReaderDocument } from '@/types/document';
 import type { DocumentMetadata } from '@/types/document-metadata';
 
 type DocumentCardProps = {
-  /** The document to display */
-  document: ReaderDocument;
-  /** Metadata from the document store (null if not yet loaded) */
-  metadata: DocumentMetadata | null;
+  /** Document metadata to display */
+  metadata: DocumentMetadata;
 };
 
 const formatDate = (date: Date): string => {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-const DocumentCard = ({ document, metadata }: DocumentCardProps) => {
-  const author = metadata?.author || document.author || 'Unknown Author';
-  const tags = metadata?.tags ?? [];
-  const created = metadata?.createdStamp.timestamp;
-  const viewed = metadata?.viewedStamp?.timestamp;
+const DocumentCard = ({ metadata }: DocumentCardProps) => {
+  const { title, author, tags, created, viewed } = metadata;
 
   return (
     <Link
-      href={`/reader?id=${document.id}`}
+      href={`/reader?id=${metadata.id}`}
       className="block rounded border border-gray-200 p-4 hover:border-gray-400 dark:border-gray-700 dark:hover:border-gray-500"
     >
       {tags.length > 0 && (
@@ -37,12 +31,12 @@ const DocumentCard = ({ document, metadata }: DocumentCardProps) => {
         </div>
       )}
 
-      <h3 className="font-medium">{document.title}</h3>
-      <p className="text-sm text-gray-500">{author}</p>
+      <h3 className="font-medium">{title}</h3>
+      <p className="text-sm text-gray-500">{author || 'Unknown Author'}</p>
 
       <div className="mt-3 flex justify-between text-xs text-gray-400">
-        <span>Uploaded: {created ? formatDate(created) : '—'}</span>
-        <span>Viewed: {viewed ? formatDate(viewed) : 'Never'}</span>
+        <span>Uploaded: {formatDate(created.timestamp)}</span>
+        <span>Viewed: {viewed ? formatDate(viewed.timestamp) : 'Never'}</span>
       </div>
     </Link>
   );
