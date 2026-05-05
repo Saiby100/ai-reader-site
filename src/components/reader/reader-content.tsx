@@ -19,7 +19,7 @@ export const ReaderContent = forwardRef<HTMLDivElement, ReaderContentProps>(
       >
         <div
           className="mx-auto max-w-[860px] w-full px-8 py-12 font-serif text-[16.5px] leading-[1.8] text-ink wrap-anywhere
-            [&_*]:max-w-full [&_pre]:overflow-x-auto
+            [&_*]:max-w-full [&_pre]:whitespace-pre-wrap
             [&_h1]:font-serif [&_h1]:text-[30px] [&_h1]:font-semibold [&_h1]:leading-[1.25] [&_h1]:text-ink [&_h1]:mb-3.5
             [&_h2]:font-sans [&_h2]:text-[14px] [&_h2]:font-semibold [&_h2]:text-ink [&_h2]:mb-2 [&_h2]:tracking-[0.01em]
             [&_h3]:font-sans [&_h3]:text-[13px] [&_h3]:font-semibold [&_h3]:text-ink [&_h3]:mb-2
