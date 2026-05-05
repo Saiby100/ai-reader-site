@@ -11,6 +11,12 @@ type NoteCardProps = {
   onDelete: (id: string) => void;
 };
 
+const TrashIcon = ({ size = 13 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 6h12M8 6V4h4v2M6 6v10h8V6" />
+  </svg>
+);
+
 const formatRelativeTime = (date: Date | string): string => {
   const now = Date.now();
   const then = new Date(date).getTime();
@@ -47,27 +53,29 @@ export const NoteCard = ({ note, onDelete }: NoteCardProps) => {
     };
   }, []);
 
-  const accentColor = NOTE_COLORS[note.color]?.accent ?? 'bg-gray-300';
+  const colors = NOTE_COLORS[note.color] ?? NOTE_COLORS.amber;
 
   return (
-    <div className="flex overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
-      <div className={`w-1 shrink-0 ${accentColor}`} />
-      <div className="flex flex-1 flex-col gap-1 p-3">
-        <p className="text-sm text-gray-800 dark:text-gray-200">{note.content}</p>
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-gray-400">{formatRelativeTime(note.created.timestamp)}</span>
-          <button
-            onClick={handleDelete}
-            className={`text-xs transition-colors ${
-              confirming
-                ? 'font-medium text-red-600 dark:text-red-400'
-                : 'text-gray-400 hover:text-red-500'
-            }`}
-          >
-            {confirming ? 'Confirm?' : 'Delete'}
-          </button>
-        </div>
+    <div
+      className="rounded-r-[var(--radius-sm)] py-2.5 px-3 mb-2 relative group"
+      style={{
+        background: colors.bg,
+        borderLeft: `3px solid ${colors.border}`,
+      }}
+    >
+      <p className="text-xs leading-[1.55] text-ink font-serif">{note.content}</p>
+      <div className="text-[11px] text-ink-3 mt-1.5">
+        {formatRelativeTime(note.created.timestamp)}
       </div>
+      <button
+        onClick={handleDelete}
+        className={`absolute top-2 right-2 p-0.5 bg-transparent border-none cursor-pointer transition-opacity ${
+          confirming ? 'opacity-100 text-rose' : 'opacity-0 group-hover:opacity-40 hover:!opacity-100 text-ink-2'
+        }`}
+        title={confirming ? 'Click again to confirm' : 'Delete'}
+      >
+        <TrashIcon size={13} />
+      </button>
     </div>
   );
 };

@@ -9,13 +9,13 @@ type TagFilterBarProps = {
 
 const TagFilterBar = ({ tags, activeTag, onTagSelect }: TagFilterBarProps) => {
   return (
-    <div className="flex gap-2 flex-wrap">
+    <div className="flex gap-1.5 flex-wrap">
       <button
         onClick={() => onTagSelect(null)}
-        className={`rounded-full px-3 py-1 text-sm border ${
+        className={`px-3 py-[5px] rounded-full border text-xs cursor-pointer transition-all font-sans ${
           activeTag === null
-            ? 'bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-gray-900 dark:border-white'
-            : 'border-gray-300 dark:border-gray-700'
+            ? 'border-accent bg-accent-light text-accent font-semibold'
+            : 'border-border bg-white text-ink-3 font-normal'
         }`}
       >
         All
@@ -24,10 +24,10 @@ const TagFilterBar = ({ tags, activeTag, onTagSelect }: TagFilterBarProps) => {
         <button
           key={tag}
           onClick={() => onTagSelect(tag)}
-          className={`rounded-full px-3 py-1 text-sm border ${
+          className={`px-3 py-[5px] rounded-full border text-xs cursor-pointer transition-all font-sans ${
             activeTag === tag
-              ? 'bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-gray-900 dark:border-white'
-              : 'border-gray-300 dark:border-gray-700'
+              ? 'border-accent bg-accent-light text-accent font-semibold'
+              : 'border-border bg-white text-ink-3 font-normal'
           }`}
         >
           {tag}

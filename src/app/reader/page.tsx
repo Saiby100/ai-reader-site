@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useReaderDocument } from '@/hooks/use-reader-document';
@@ -8,13 +8,14 @@ import { markDocumentViewedAction } from '@/actions/document-metadata-actions';
 import { ReaderHeader } from '@/components/reader/reader-header';
 import { ReaderContent } from '@/components/reader/reader-content';
 import { ReaderDrawer } from '@/components/reader/reader-drawer';
-import { ReaderDrawerToggle } from '@/components/reader/reader-drawer-toggle';
 
 const ReaderPageContent = () => {
   const searchParams = useSearchParams();
   const id = searchParams.get('id');
   const { document, isLoading } = useReaderDocument(id);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(true);
+  const [progress, setProgress] = useState(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (document?.id) {
@@ -22,36 +23,48 @@ const ReaderPageContent = () => {
     }
   }, [document?.id]);
 
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const pct = (el.scrollTop / (el.scrollHeight - el.clientHeight)) * 100;
+    setProgress(Math.min(100, Math.max(0, pct)));
+  }, []);
+
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <p className="text-gray-500">Loading document...</p>
+      <div className="flex h-screen items-center justify-center bg-sand">
+        <p className="text-ink-3 text-sm">Loading document...</p>
       </div>
     );
   }
 
   if (!document) {
     return (
-      <div className="flex h-screen flex-col items-center justify-center gap-2">
-        <p className="text-gray-500">No document loaded.</p>
-        <Link href="/" className="text-blue-600 underline hover:text-blue-800">
-          Go back
+      <div className="flex h-screen flex-col items-center justify-center gap-3 bg-sand">
+        <p className="text-ink-3 text-sm">No document loaded.</p>
+        <Link href="/" className="text-accent text-sm hover:underline">
+          Back to Library
         </Link>
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen flex-col">
-      <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800">
-        <ReaderHeader title={document.title} author={document.author} />
-        <div className="pr-4">
-          <ReaderDrawerToggle isOpen={drawerOpen} onToggle={() => setDrawerOpen(!drawerOpen)} />
-        </div>
-      </div>
+    <div className="flex h-screen flex-col bg-sand">
+      <ReaderHeader
+        title={document.title}
+        author={document.author}
+        progress={progress}
+        drawerOpen={drawerOpen}
+        onToggleDrawer={() => setDrawerOpen((o) => !o)}
+      />
       <div className="flex flex-1 overflow-hidden">
-        <ReaderContent htmlContent={document.htmlContent} />
-        <ReaderDrawer isOpen={drawerOpen} documentId={document.id} />
+        <ReaderContent
+          ref={scrollRef}
+          htmlContent={document.htmlContent}
+          onScroll={handleScroll}
+        />
+        <ReaderDrawer isOpen={drawerOpen} onToggle={() => setDrawerOpen((o) => !o)} documentId={document.id} />
       </div>
     </div>
   );
@@ -61,8 +74,8 @@ const ReaderPage = () => {
   return (
     <Suspense
       fallback={
-        <div className="flex h-screen items-center justify-center">
-          <p className="text-gray-500">Loading document...</p>
+        <div className="flex h-screen items-center justify-center bg-sand">
+          <p className="text-ink-3 text-sm">Loading document...</p>
         </div>
       }
     >

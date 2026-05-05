@@ -8,8 +8,7 @@ const LibraryPage = async () => {
   const metadataList = await fetchDocumentMetadataList(MOCK_USER.id);
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-8">
-      <h1 className="text-2xl font-bold mb-6">My Library</h1>
+    <div className="min-h-screen bg-sand">
       <LibraryClient metadataList={metadataList} />
     </div>
   );

@@ -9,26 +9,57 @@
 }
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --sand: oklch(97% 0.005 60);
+  --sand-2: oklch(93% 0.01 65);
+  --sand-3: oklch(88% 0.015 65);
+  --ink: oklch(20% 0.01 60);
+  --ink-2: oklch(38% 0.01 60);
+  --ink-3: oklch(58% 0.01 60);
+  --accent: oklch(52% 0.18 260);
+  --accent-light: oklch(92% 0.06 260);
+  --amber: oklch(72% 0.16 75);
+  --amber-light: oklch(94% 0.06 75);
+  --green: oklch(58% 0.15 155);
+  --green-light: oklch(92% 0.06 155);
+  --rose: oklch(60% 0.18 15);
+  --rose-light: oklch(94% 0.06 15);
+  --border: oklch(86% 0.008 65);
+  --radius: 10px;
+  --radius-sm: 6px;
+  --radius-lg: 14px;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-sand: var(--sand);
+  --color-sand-2: var(--sand-2);
+  --color-sand-3: var(--sand-3);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-accent: var(--accent);
+  --color-accent-light: var(--accent-light);
+  --color-amber: var(--amber);
+  --color-amber-light: var(--amber-light);
+  --color-green: var(--green);
+  --color-green-light: var(--green-light);
+  --color-rose: var(--rose);
+  --color-rose-light: var(--rose-light);
+  --color-border: var(--border);
+  --font-sans: var(--font-dm-sans);
+  --font-serif: var(--font-lora);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--sand);
+  color: var(--ink);
+  font-family: var(--font-sans), sans-serif;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--sand-3); border-radius: 3px; }
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
