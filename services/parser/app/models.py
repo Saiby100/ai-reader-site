@@ -43,14 +43,6 @@ class ParseResponse(BaseModel):
     errors: list[str] = []
 
 
-class ProgressEvent(BaseModel):
-    """A single SSE progress event."""
-
-    stage: str
-    progress: float
-    message: str
-
-
 class CapabilitiesResponse(BaseModel):
     """Server-defined parsing capabilities advertised to clients."""
 

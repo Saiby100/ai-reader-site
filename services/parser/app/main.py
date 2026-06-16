@@ -1,15 +1,14 @@
 import asyncio
-import json
 import logging
 import os
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from fastapi import Depends, FastAPI, File, HTTPException, Header, UploadFile
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse
 
 from .config import settings
-from .models import CapabilitiesResponse, ParseResponse, ProgressEvent
+from .models import CapabilitiesResponse, ParseResponse
 from .parser import is_model_loaded, load_models, parse_document
 
 logging.basicConfig(
@@ -76,30 +75,6 @@ async def parse(file: UploadFile = File(...)) -> ParseResponse:
         raise HTTPException(500, f"Parse failed: {exc}") from exc
 
     return result
-
-
-@app.post("/parse/stream", dependencies=[Depends(verify_auth)])
-async def parse_stream(file: UploadFile = File(...)) -> StreamingResponse:
-    content = await file.read()
-    _validate_file(file.filename, len(content))
-
-    async def event_generator() -> AsyncGenerator[str, None]:
-        yield _sse_event(ProgressEvent(stage="started", progress=0.0, message="Upload received"))
-        yield _sse_event(ProgressEvent(stage="parsing", progress=0.1, message="Parsing document..."))
-
-        try:
-            result = await asyncio.to_thread(parse_document, content, file.filename or "document")
-            yield _sse_event(ProgressEvent(stage="completed", progress=1.0, message="Parse complete"))
-            yield f"event: result\ndata: {result.model_dump_json()}\n\n"
-        except Exception as exc:
-            logger.exception("Stream parse failed for %s", file.filename)
-            yield _sse_event(ProgressEvent(stage="failed", progress=0.0, message=str(exc)))
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
-
-
-def _sse_event(event: ProgressEvent) -> str:
-    return f"event: progress\ndata: {json.dumps(event.model_dump())}\n\n"
 
 
 @app.exception_handler(HTTPException)
