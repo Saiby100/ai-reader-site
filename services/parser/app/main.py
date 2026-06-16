@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI, File, HTTPException, Header, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from .config import settings
-from .models import ParseResponse, ProgressEvent
+from .models import CapabilitiesResponse, ParseResponse, ProgressEvent
 from .parser import is_model_loaded, load_models, parse_document
 
 logging.basicConfig(
@@ -54,6 +54,14 @@ def _validate_file(filename: str | None, size: int) -> None:
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok", "model_loaded": is_model_loaded()}
+
+
+@app.get("/capabilities")
+async def capabilities() -> CapabilitiesResponse:
+    return CapabilitiesResponse(
+        allowed_extensions=sorted(settings.allowed_extensions_set),
+        max_file_size_mb=settings.max_file_size_mb,
+    )
 
 
 @app.post("/parse", dependencies=[Depends(verify_auth)])

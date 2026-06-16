@@ -5,10 +5,6 @@ export const maxDuration = 300;
 
 const PARSER_URL = process.env.PARSER_SERVICE_URL ?? 'http://localhost:8000';
 const PARSER_SECRET = process.env.PARSER_SERVICE_SECRET ?? '';
-const MAX_FILE_SIZE = 100 * 1024 * 1024;
-const ALLOWED_EXTENSIONS = new Set([
-  '.pdf', '.docx', '.pptx', '.html', '.htm', '.md', '.txt',
-]);
 
 export const POST = async (request: Request) => {
   const formData = await request.formData();
@@ -16,18 +12,6 @@ export const POST = async (request: Request) => {
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: 'No file provided' }, { status: 400 });
-  }
-
-  const ext = getExtension(file.name);
-  if (!ALLOWED_EXTENSIONS.has(ext)) {
-    return NextResponse.json(
-      { error: `Unsupported file type: ${ext}` },
-      { status: 415 },
-    );
-  }
-
-  if (file.size > MAX_FILE_SIZE) {
-    return NextResponse.json({ error: 'File too large' }, { status: 413 });
   }
 
   const outForm = new FormData();
@@ -64,9 +48,4 @@ export const POST = async (request: Request) => {
       Connection: 'keep-alive',
     },
   });
-};
-
-const getExtension = (filename: string): string => {
-  const dot = filename.lastIndexOf('.');
-  return dot === -1 ? '' : filename.slice(dot).toLowerCase();
 };

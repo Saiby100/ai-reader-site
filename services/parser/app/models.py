@@ -49,3 +49,10 @@ class ProgressEvent(BaseModel):
     stage: str
     progress: float
     message: str
+
+
+class CapabilitiesResponse(BaseModel):
+    """Server-defined parsing capabilities advertised to clients."""
+
+    allowed_extensions: list[str]
+    max_file_size_mb: int

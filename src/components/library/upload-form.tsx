@@ -2,7 +2,8 @@
 
 import { useState, useRef } from 'react';
 import { useDocumentUpload } from '@/hooks/use-reader-document';
-import { getSupportedAcceptString, getFileExtension } from '@/lib/file-parsers';
+import { useParserCapabilities } from '@/hooks/use-parser-capabilities';
+import { getAcceptString, getExtensionLabel, getFileExtension } from '@/lib/file-parsers';
 import { UploadIcon, CheckIcon, CloseIcon } from '@/components/icons';
 
 type UploadFormProps = {
@@ -18,31 +19,54 @@ const UploadForm = ({ onUploadComplete }: UploadFormProps) => {
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [tagsInput, setTagsInput] = useState('');
+  const [fileError, setFileError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { uploadDocument } = useDocumentUpload();
+  const { capabilities, isLoading: capabilitiesLoading, error: capabilitiesError } =
+    useParserCapabilities();
+
+  const uploadDisabled = !capabilities;
 
   const resetForm = () => {
     setTitle('');
     setAuthor('');
     setTagsInput('');
     setSelectedFileName(null);
+    setFileError(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const validateFile = (file: File): string | null => {
+    if (!capabilities) return 'Document service unavailable';
+    const ext = getFileExtension(file.name);
+    if (!capabilities.allowedExtensions.includes(ext)) {
+      return `Unsupported file type: ${ext || 'unknown'}`;
+    }
+    if (file.size > capabilities.maxFileSizeMb * 1024 * 1024) {
+      return `File is too large. Maximum size is ${capabilities.maxFileSizeMb}MB`;
+    }
+    return null;
+  };
+
+  const acceptFile = (file: File) => {
+    const validationError = validateFile(file);
+    setFileError(validationError);
+    setSelectedFileName(file.name);
+    if (!title) {
+      const ext = getFileExtension(file.name);
+      setTitle(file.name.replace(new RegExp(`\\${ext}$`, 'i'), ''));
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setSelectedFileName(file.name);
-      if (!title) {
-        const ext = getFileExtension(file.name);
-        setTitle(file.name.replace(new RegExp(`\\${ext}$`, 'i'), ''));
-      }
-    }
+    if (file) acceptFile(file);
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragging(false);
+    if (uploadDisabled) return;
     const file = e.dataTransfer.files[0];
     if (file) {
       const dt = new DataTransfer();
@@ -50,11 +74,7 @@ const UploadForm = ({ onUploadComplete }: UploadFormProps) => {
       if (fileInputRef.current) {
         fileInputRef.current.files = dt.files;
       }
-      setSelectedFileName(file.name);
-      if (!title) {
-        const ext = getFileExtension(file.name);
-        setTitle(file.name.replace(new RegExp(`\\${ext}$`, 'i'), ''));
-      }
+      acceptFile(file);
     }
   };
 
@@ -62,6 +82,12 @@ const UploadForm = ({ onUploadComplete }: UploadFormProps) => {
     e.preventDefault();
     const file = fileInputRef.current?.files?.[0];
     if (!file) return;
+
+    const validationError = validateFile(file);
+    if (validationError) {
+      setFileError(validationError);
+      return;
+    }
 
     const tags = tagsInput
       .split(',')
@@ -110,21 +136,29 @@ const UploadForm = ({ onUploadComplete }: UploadFormProps) => {
             </div>
 
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              {capabilitiesError && (
+                <div className="rounded-[var(--radius)] bg-red-50 border border-red-200 px-3 py-2.5 text-[12.5px] text-red-600">
+                  Document service is unavailable. Uploads are disabled until it&apos;s reachable again.
+                </div>
+              )}
               <div
-                onClick={() => fileInputRef.current?.click()}
-                onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+                onClick={() => { if (!uploadDisabled) fileInputRef.current?.click(); }}
+                onDragOver={(e) => { e.preventDefault(); if (!uploadDisabled) setDragging(true); }}
                 onDragLeave={() => setDragging(false)}
                 onDrop={handleDrop}
-                className={`border-2 border-dashed rounded-[var(--radius-lg)] p-9 flex flex-col items-center gap-3 cursor-pointer transition-all ${
-                  dragging
-                    ? 'border-accent bg-accent-light'
-                    : 'border-border bg-sand-1'
+                className={`border-2 border-dashed rounded-[var(--radius-lg)] p-9 flex flex-col items-center gap-3 transition-all ${
+                  uploadDisabled
+                    ? 'border-border bg-sand-1 opacity-60 cursor-not-allowed'
+                    : dragging
+                      ? 'border-accent bg-accent-light cursor-pointer'
+                      : 'border-border bg-sand-1 cursor-pointer'
                 }`}
               >
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept={getSupportedAcceptString()}
+                  accept={capabilities ? getAcceptString(capabilities.allowedExtensions) : undefined}
+                  disabled={uploadDisabled}
                   className="hidden"
                   onChange={handleFileChange}
                 />
@@ -135,7 +169,9 @@ const UploadForm = ({ onUploadComplete }: UploadFormProps) => {
                 >
                   <UploadIcon size={22} className={dragging ? 'text-white' : 'text-ink-3'} />
                 </div>
-                {selectedFileName ? (
+                {capabilitiesLoading ? (
+                  <div className="text-[13px] text-ink-3">Checking document service…</div>
+                ) : selectedFileName ? (
                   <div className="text-[13px] text-green font-medium flex items-center gap-1.5">
                     <CheckIcon size={14} /> {selectedFileName}
                   </div>
@@ -144,10 +180,17 @@ const UploadForm = ({ onUploadComplete }: UploadFormProps) => {
                     <div className="text-[13.5px] font-medium text-ink text-center">
                       Drop a document here, or <span className="text-accent">click to browse</span>
                     </div>
-                    <div className="text-[11.5px] text-ink-3">PDF, DOCX, PPTX, HTML, Markdown, TXT</div>
+                    {capabilities && (
+                      <div className="text-[11.5px] text-ink-3">
+                        {getExtensionLabel(capabilities.allowedExtensions)} · up to {capabilities.maxFileSizeMb}MB
+                      </div>
+                    )}
                   </>
                 )}
               </div>
+              {fileError && (
+                <div className="text-[12px] text-red-600 -mt-1">{fileError}</div>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -187,7 +230,7 @@ const UploadForm = ({ onUploadComplete }: UploadFormProps) => {
               <div className="flex items-center gap-3 pt-1">
                 <button
                   type="submit"
-                  disabled={isUploading || !selectedFileName}
+                  disabled={isUploading || !selectedFileName || uploadDisabled || !!fileError}
                   className="h-[38px] px-[18px] rounded-[var(--radius)] bg-accent border-none text-white text-[13px] font-medium cursor-pointer flex items-center justify-center gap-[7px] font-sans transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isUploading ? 'Uploading…' : 'Upload'}
