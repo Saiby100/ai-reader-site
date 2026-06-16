@@ -1,7 +1,9 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
     service_secret: str = ""
     max_file_size_mb: int = 100
     allowed_extensions: str = ".pdf,.docx,.pptx,.html,.htm,.md,.txt"
