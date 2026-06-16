@@ -6,7 +6,8 @@ import time
 
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.document import ConversionResult
-from docling.document_converter import DocumentConverter
+from docling.datamodel.pipeline_options import PdfPipelineOptions
+from docling.document_converter import DocumentConverter, PdfFormatOption
 
 from .models import BoundingBox, DocumentElement, ParseMetadata, ParseResponse
 
@@ -15,10 +16,30 @@ logger = logging.getLogger(__name__)
 _converter: DocumentConverter | None = None
 
 
+def _make_converter() -> DocumentConverter:
+    """Build the single Docling converter used for all documents.
+
+    Formula and code enrichment are always on: they self-gate per item (only
+    elements labelled FORMULA/CODE are processed and cropped on demand), so they
+    add no per-document cost to prose documents while making equations available
+    as LaTeX. Keeping a single converter avoids duplicating the heavy base layout
+    and table models across pipelines.
+    """
+    options = PdfPipelineOptions()
+    options.do_formula_enrichment = True
+    options.do_code_enrichment = True
+    return DocumentConverter(
+        format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=options)}
+    )
+
+
 def load_models() -> None:
     global _converter
-    logger.info("Loading Docling models...")
-    _converter = DocumentConverter()
+    logger.info("Loading Docling models (with formula + code enrichment)...")
+    _converter = _make_converter()
+    # Force model loading now (construction is lazy) so the first request — math
+    # or otherwise — isn't slowed by model initialization.
+    _converter.initialize_pipeline(InputFormat.PDF)
     logger.info("Docling models loaded")
 
 
