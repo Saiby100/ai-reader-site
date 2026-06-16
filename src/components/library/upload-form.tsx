@@ -144,7 +144,7 @@ const UploadForm = ({ onUploadComplete }: UploadFormProps) => {
                     <div className="text-[13.5px] font-medium text-ink text-center">
                       Drop a document here, or <span className="text-accent">click to browse</span>
                     </div>
-                    <div className="text-[11.5px] text-ink-3">PDF, DOCX, TXT, Markdown</div>
+                    <div className="text-[11.5px] text-ink-3">PDF, DOCX, PPTX, HTML, Markdown, TXT</div>
                   </>
                 )}
               </div>

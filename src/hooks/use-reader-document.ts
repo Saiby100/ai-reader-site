@@ -5,7 +5,6 @@ import type { ReaderDocument } from '@/types/document';
 import type { DocumentMetadataInput } from '@/types/document-metadata';
 import { loadDocument, saveDocument } from '@/lib/reader-storage';
 import { saveDocumentMetadataAction } from '@/actions/document-metadata-actions';
-import { parseFileToHtml } from '@/lib/file-parsers';
 
 export const useReaderDocument = (id: string | null) => {
   const [document, setDocument] = useState<ReaderDocument | null>(null);
@@ -23,20 +22,23 @@ export const useReaderDocument = (id: string | null) => {
   return { document, isLoading };
 };
 
-const readFileAsText = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsText(file);
-  });
-};
-
 export const useDocumentUpload = () => {
   const uploadDocument = useCallback(
     async (file: File, metadata: DocumentMetadataInput): Promise<ReaderDocument> => {
-      const content = await readFileAsText(file);
-      const htmlContent = parseFileToHtml(file.name, content);
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/parse', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Parse failed' }));
+        throw new Error(err.error ?? 'Parse failed');
+      }
+
+      const { htmlContent } = await response.json();
 
       const doc = await saveDocument({ title: metadata.title, author: metadata.author, htmlContent });
       await saveDocumentMetadataAction(doc.id, metadata);
