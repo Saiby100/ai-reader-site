@@ -1,0 +1,34 @@
+services:
+  web:
+    build: .
+    ports:
+      - "3000:3000"
+    depends_on:
+      parser:
+        condition: service_healthy
+    environment:
+      - PARSER_SERVICE_URL=http://parser:8000
+      - PARSER_SERVICE_SECRET=dev-secret
+
+  parser:
+    build: ./services/parser
+    expose:
+      - "8000"
+    environment:
+      - SERVICE_SECRET=dev-secret
+      - LOG_LEVEL=info
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    volumes:
+      - parser-models:/root/.cache
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+volumes:
+  parser-models:
