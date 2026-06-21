@@ -1,16 +1,16 @@
 'use client';
 
-import { forwardRef } from 'react';
+import { forwardRef, type ReactNode } from 'react';
 
 type ReaderContentProps = {
-  /** Normalized HTML string to render as document content */
-  htmlContent: string;
+  /** Rendered document content (the parsed element tree as React nodes) */
+  children: ReactNode;
   /** Scroll event handler for progress tracking */
   onScroll?: () => void;
 };
 
 export const ReaderContent = forwardRef<HTMLDivElement, ReaderContentProps>(
-  ({ htmlContent, onScroll }, ref) => {
+  ({ children, onScroll }, ref) => {
     return (
       <main
         ref={ref}
@@ -28,8 +28,9 @@ export const ReaderContent = forwardRef<HTMLDivElement, ReaderContentProps>(
             [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-5
             [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-5
             [&_li]:mb-1.5"
-          dangerouslySetInnerHTML={{ __html: htmlContent }}
-        />
+        >
+          {children}
+        </div>
       </main>
     );
   }

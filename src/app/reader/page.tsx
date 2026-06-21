@@ -7,6 +7,7 @@ import { useReaderDocument } from '@/hooks/use-reader-document';
 import { markDocumentViewedAction } from '@/actions/document-metadata-actions';
 import { ReaderHeader } from '@/components/reader/reader-header';
 import { ReaderContent } from '@/components/reader/reader-content';
+import { DocumentRenderer } from '@/components/reader/document/document-renderer';
 import { ReaderDrawer } from '@/components/reader/reader-drawer';
 
 const ReaderPageContent = () => {
@@ -59,11 +60,9 @@ const ReaderPageContent = () => {
         onToggleDrawer={() => setDrawerOpen((o) => !o)}
       />
       <div className="flex flex-1 min-h-0 overflow-hidden">
-        <ReaderContent
-          ref={scrollRef}
-          htmlContent={document.htmlContent}
-          onScroll={handleScroll}
-        />
+        <ReaderContent ref={scrollRef} onScroll={handleScroll}>
+          <DocumentRenderer tree={document.document} />
+        </ReaderContent>
         <ReaderDrawer isOpen={drawerOpen} onToggle={() => setDrawerOpen((o) => !o)} documentId={document.id} />
       </div>
     </div>

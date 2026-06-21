@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { ReaderDocument } from '@/types/document';
+import type { DocumentElement, ParseResponse } from '@/types/document-element';
 import type { DocumentMetadataInput } from '@/types/document-metadata';
 import { loadDocument, saveDocument } from '@/lib/reader-storage';
 import { saveDocumentMetadataAction } from '@/actions/document-metadata-actions';
@@ -38,9 +39,14 @@ export const useDocumentUpload = () => {
         throw new Error(err.error ?? 'Parse failed');
       }
 
-      const { htmlContent } = await response.json();
+      const parsed = (await response.json()) as ParseResponse;
 
-      const doc = await saveDocument({ title: metadata.title, author: metadata.author, htmlContent });
+      const doc = await saveDocument({
+        title: metadata.title,
+        author: metadata.author,
+        document: parsed.document,
+        metadata: parsed.metadata,
+      });
       await saveDocumentMetadataAction(doc.id, metadata);
 
       return doc;
@@ -50,9 +56,22 @@ export const useDocumentUpload = () => {
 
   const uploadFromText = useCallback(
     async (text: string, metadata: DocumentMetadataInput): Promise<ReaderDocument> => {
-      const htmlContent = `<pre>${text}</pre>`;
+      // Wrap pasted text in a single preformatted element so stored documents
+      // always share the structured-tree shape.
+      const document: DocumentElement[] = [{ type: 'code', text }];
 
-      const doc = await saveDocument({ title: metadata.title, author: metadata.author, htmlContent });
+      const doc = await saveDocument({
+        title: metadata.title,
+        author: metadata.author,
+        document,
+        metadata: {
+          filename: metadata.title,
+          page_count: 1,
+          format_detected: 'txt',
+          parse_duration_ms: 0,
+          status: 'success',
+        },
+      });
       await saveDocumentMetadataAction(doc.id, metadata);
 
       return doc;

@@ -1,5 +1,6 @@
 import base64
 import logging
+import math
 import os
 import tempfile
 import time
@@ -9,7 +10,7 @@ from docling.datamodel.document import ConversionResult
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.document_converter import DocumentConverter, PdfFormatOption
 
-from .models import BoundingBox, DocumentElement, ParseMetadata, ParseResponse
+from .models import DocumentElement, ParseConfidence, ParseMetadata, ParseResponse
 
 logger = logging.getLogger(__name__)
 
@@ -74,17 +75,10 @@ def parse_document(file_bytes: bytes, filename: str) -> ParseResponse:
         elements = _build_tree(result)
         duration_ms = int((time.perf_counter() - start) * 1000)
 
-        page_count = result.document.num_pages() if hasattr(result.document, "num_pages") else 0
-
         return ParseResponse(
             document=elements,
-            metadata=ParseMetadata(
-                filename=filename,
-                page_count=page_count,
-                format_detected=ext.lstrip("."),
-                parse_duration_ms=duration_ms,
-            ),
-            errors=[],
+            metadata=_build_metadata(result, filename, ext, duration_ms),
+            errors=[e.error_message for e in result.errors],
         )
     except Exception:
         logger.exception("Failed to parse %s", filename)
@@ -93,9 +87,49 @@ def parse_document(file_bytes: bytes, filename: str) -> ParseResponse:
         os.unlink(tmp_path)
 
 
+def _build_metadata(
+    result: ConversionResult, filename: str, ext: str, duration_ms: int
+) -> ParseMetadata:
+    doc = result.document
+    page_count = doc.num_pages() if hasattr(doc, "num_pages") else 0
+
+    origin = getattr(doc, "origin", None)
+    binary_hash = getattr(origin, "binary_hash", None)
+
+    return ParseMetadata(
+        filename=filename,
+        page_count=page_count,
+        format_detected=ext.lstrip("."),
+        parse_duration_ms=duration_ms,
+        status=_enum_value(result.status) or "unknown",
+        confidence=_extract_confidence(result),
+        binary_hash=str(binary_hash) if binary_hash is not None else None,
+    )
+
+
+def _extract_confidence(result: ConversionResult) -> ParseConfidence | None:
+    report = getattr(result, "confidence", None)
+    if report is None:
+        return None
+
+    grade = _enum_value(getattr(report, "mean_grade", None))
+    if grade is None:
+        return None
+
+    score = getattr(report, "mean_score", None)
+    if score is None or (isinstance(score, float) and math.isnan(score)):
+        score = None
+    else:
+        score = float(score)
+
+    return ParseConfidence(grade=grade, score=score)
+
+
 def _build_tree(result: ConversionResult) -> list[DocumentElement]:
     from docling_core.types.doc.document import (
+        CodeItem,
         DoclingDocument,
+        FormulaItem,
         ListItem,
         SectionHeaderItem,
         TableItem,
@@ -107,109 +141,75 @@ def _build_tree(result: ConversionResult) -> list[DocumentElement]:
     elements: list[DocumentElement] = []
 
     for item, _level in doc.iterate_items():
-        bbox = _extract_bbox(item)
-        page = _extract_page(item)
+        meta = _element_meta(item)
+        label = getattr(item, "label", None)
 
         if isinstance(item, SectionHeaderItem):
             level = item.level if hasattr(item, "level") else 1
-            elements.append(DocumentElement(
-                type="heading",
-                level=level,
-                text=item.text,
-                bbox=bbox,
-                page=page,
-            ))
+            elements.append(DocumentElement(type="heading", level=level, text=item.text, **meta))
         elif isinstance(item, TableItem):
             html = item.export_to_html() if hasattr(item, "export_to_html") else None
             text = item.text if hasattr(item, "text") else None
-            elements.append(DocumentElement(
-                type="table",
-                html=html,
-                text=text,
-                bbox=bbox,
-                page=page,
-            ))
+            elements.append(DocumentElement(type="table", html=html, text=text, **meta))
         elif isinstance(item, ListItem):
-            elements.append(DocumentElement(
-                type="list_item",
-                text=item.text,
-                bbox=bbox,
-                page=page,
-            ))
+            elements.append(DocumentElement(type="list_item", text=item.text, **meta))
+        elif isinstance(item, FormulaItem):
+            # FormulaItem.text holds the LaTeX produced by formula enrichment.
+            elements.append(DocumentElement(type="formula", text=item.text, **meta))
+        elif isinstance(item, CodeItem):
+            elements.append(
+                DocumentElement(
+                    type="code", text=item.text, language=_code_language(item), **meta
+                )
+            )
         elif hasattr(item, "image") and item.image is not None:
             data_uri = _image_to_data_uri(item)
-            elements.append(DocumentElement(
-                type="image",
-                data_uri=data_uri,
-                bbox=bbox,
-                page=page,
-            ))
+            elements.append(DocumentElement(type="image", data_uri=data_uri, **meta))
         elif isinstance(item, TextItem):
-            label = item.label if hasattr(item, "label") else None
             if label == DocItemLabel.TITLE:
-                elements.append(DocumentElement(
-                    type="title",
-                    text=item.text,
-                    bbox=bbox,
-                    page=page,
-                ))
-            elif label == DocItemLabel.CODE:
-                elements.append(DocumentElement(
-                    type="code_block",
-                    text=item.text,
-                    bbox=bbox,
-                    page=page,
-                ))
+                elements.append(DocumentElement(type="title", text=item.text, **meta))
+            elif label == DocItemLabel.CAPTION:
+                elements.append(DocumentElement(type="caption", text=item.text, **meta))
             elif label == DocItemLabel.PAGE_HEADER or label == DocItemLabel.PAGE_FOOTER:
                 continue
             else:
-                elements.append(DocumentElement(
-                    type="paragraph",
-                    text=item.text,
-                    bbox=bbox,
-                    page=page,
-                ))
+                elements.append(DocumentElement(type="paragraph", text=item.text, **meta))
         elif hasattr(item, "text") and item.text:
-            elements.append(DocumentElement(
-                type="paragraph",
-                text=item.text,
-                bbox=bbox,
-                page=page,
-            ))
+            elements.append(DocumentElement(type="paragraph", text=item.text, **meta))
 
     return elements
 
 
-def _extract_bbox(item: object) -> BoundingBox | None:
+def _element_meta(item: object) -> dict[str, object]:
+    """Shared metadata carried by every element: stable ref, page, label, charspan."""
+    ref = getattr(item, "self_ref", None)
+    label = _enum_value(getattr(item, "label", None))
+
+    page: int | None = None
+    charspan: tuple[int, int] | None = None
     prov = getattr(item, "prov", None)
-    if not prov or not isinstance(prov, list) or len(prov) == 0:
+    if isinstance(prov, list) and prov:
+        first = prov[0]
+        page = getattr(first, "page_no", None)
+        span = getattr(first, "charspan", None)
+        if span is not None and len(span) == 2:
+            charspan = (int(span[0]), int(span[1]))
+
+    return {"ref": ref, "page": page, "label": label, "charspan": charspan}
+
+
+def _code_language(item: object) -> str | None:
+    value = _enum_value(getattr(item, "code_language", None))
+    if value is None or value.lower() == "unknown":
         return None
+    return value
 
-    first = prov[0]
-    bbox_obj = getattr(first, "bbox", None)
-    if bbox_obj is None:
+
+def _enum_value(value: object) -> str | None:
+    """Return ``value.value`` for enums, the string itself for strings, else None."""
+    if value is None:
         return None
-
-    page_no = getattr(first, "page_no", 0)
-    l_val = getattr(bbox_obj, "l", 0.0)
-    t_val = getattr(bbox_obj, "t", 0.0)
-    r_val = getattr(bbox_obj, "r", 0.0)
-    b_val = getattr(bbox_obj, "b", 0.0)
-
-    return BoundingBox(
-        x=l_val,
-        y=t_val,
-        width=r_val - l_val,
-        height=b_val - t_val,
-        page=page_no,
-    )
-
-
-def _extract_page(item: object) -> int | None:
-    prov = getattr(item, "prov", None)
-    if not prov or not isinstance(prov, list) or len(prov) == 0:
-        return None
-    return getattr(prov[0], "page_no", None)
+    return getattr(value, "value", value) if not isinstance(value, str) else value
 
 
 def _image_to_data_uri(item: object) -> str | None:

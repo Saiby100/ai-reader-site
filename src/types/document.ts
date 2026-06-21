@@ -1,3 +1,5 @@
+import type { DocumentElement, ParseMetadata } from '@/types/document-element';
+
 export type ReaderDocument = {
   /** Unique identifier (UUID v4) */
   id: string;
@@ -5,6 +7,8 @@ export type ReaderDocument = {
   title: string;
   /** Document author displayed below the title */
   author: string;
-  /** Normalized HTML string representing the full document content */
-  htmlContent: string;
+  /** Parsed document tree rendered by the reader */
+  document: DocumentElement[];
+  /** Document-level metadata from the parse (status, confidence, page count, …) */
+  metadata: ParseMetadata;
 };
