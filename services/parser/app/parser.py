@@ -5,11 +5,13 @@ import os
 import tempfile
 import time
 
+from docling.datamodel.accelerator_options import AcceleratorOptions
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.document import ConversionResult
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.document_converter import DocumentConverter, PdfFormatOption
 
+from .config import settings
 from .models import DocumentElement, ParseConfidence, ParseMetadata, ParseResponse
 
 logger = logging.getLogger(__name__)
@@ -20,15 +22,22 @@ _converter: DocumentConverter | None = None
 def _make_converter() -> DocumentConverter:
     """Build the single Docling converter used for all documents.
 
-    Formula and code enrichment are always on: they self-gate per item (only
-    elements labelled FORMULA/CODE are processed and cropped on demand), so they
-    add no per-document cost to prose documents while making equations available
-    as LaTeX. Keeping a single converter avoids duplicating the heavy base layout
-    and table models across pipelines.
+    Tuned for ordinary ebooks (text + images): image extraction is on (cheap) so
+    figures survive, while OCR and formula/code enrichment default off because they
+    are CPU-heavy and unnecessary for born-digital documents. Enrichment runs a
+    vision-language model per equation/code block and can peg a CPU machine, so it is
+    opt-in via ``settings.enable_enrichment`` for capable (ideally GPU) hardware.
     """
     options = PdfPipelineOptions()
-    options.do_formula_enrichment = True
-    options.do_code_enrichment = True
+    options.do_formula_enrichment = settings.enable_enrichment
+    options.do_code_enrichment = settings.enable_enrichment
+    options.do_ocr = settings.do_ocr
+    options.generate_picture_images = settings.generate_picture_images
+    options.images_scale = settings.images_scale
+    options.accelerator_options = AcceleratorOptions(
+        device=settings.accelerator_device,
+        num_threads=settings.num_threads,
+    )
     return DocumentConverter(
         format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=options)}
     )
@@ -36,10 +45,15 @@ def _make_converter() -> DocumentConverter:
 
 def load_models() -> None:
     global _converter
-    logger.info("Loading Docling models (with formula + code enrichment)...")
+    logger.info(
+        "Loading Docling models (enrichment=%s, ocr=%s, device=%s)...",
+        settings.enable_enrichment,
+        settings.do_ocr,
+        settings.accelerator_device,
+    )
     _converter = _make_converter()
-    # Force model loading now (construction is lazy) so the first request — math
-    # or otherwise — isn't slowed by model initialization.
+    # Force model loading now (construction is lazy) so the first request isn't slowed
+    # by model initialization.
     _converter.initialize_pipeline(InputFormat.PDF)
     logger.info("Docling models loaded")
 
