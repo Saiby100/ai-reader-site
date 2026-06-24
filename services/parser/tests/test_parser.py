@@ -107,3 +107,69 @@ def test_element_meta_tolerates_missing_provenance() -> None:
 
     meta = _element_meta(_Item(self_ref="#/texts/1"))
     assert meta == {"ref": "#/texts/1", "page": None, "label": None, "charspan": None}
+
+
+PUA_FR = ""  # stands in for the 'fr' ligature glyph
+PUA_FT = ""  # stands in for the 'ft' ligature glyph
+
+
+def _el(**kwargs: object):
+    from app.models import DocumentElement
+
+    kwargs.setdefault("type", "paragraph")
+    return DocumentElement(**kwargs)
+
+
+def test_collect_pua_counts_across_tree_and_fields() -> None:
+    from app.parser import _collect_pua
+
+    tree = [
+        _el(text=f"O{PUA_FT}en and A{PUA_FR}ica"),
+        _el(
+            type="table",
+            html=f"<td>{PUA_FR}om</td>",
+            children=[_el(text=f"le{PUA_FT}")],
+        ),
+        _el(text="clean paragraph, no broken glyphs"),
+    ]
+    counts = _collect_pua(tree)
+    assert counts[PUA_FT] == 2  # 'Often' + 'left'
+    assert counts[PUA_FR] == 2  # 'Africa' + 'from' (in table html)
+    assert sum(counts.values()) == 4
+
+
+def test_apply_glyph_map_absorbs_pad_spaces_and_clears_charspan() -> None:
+    from app.parser import _apply_glyph_map
+
+    mapping = {PUA_FT: "ft", PUA_FR: "fr"}
+    # Docling pads the glyph with a space on each side; a real word boundary stays separate.
+    mid = _el(text=f"O {PUA_FT} en", charspan=(0, 5))  # 'Often'
+    initial = _el(text=f"goods  {PUA_FR} om here", charspan=(0, 9))  # '... goods from here'
+    final = _el(text=f"le {PUA_FT} .", charspan=(0, 4))  # 'left.'
+    clean = _el(text="untouched", charspan=(0, 9))
+
+    _apply_glyph_map([mid, initial, final, clean], mapping)
+
+    assert mid.text == "Often"
+    assert initial.text == "goods from here"
+    assert final.text == "left."
+    # rewritten elements drop their now-stale charspan; the clean one keeps it
+    assert mid.charspan is None and initial.charspan is None and final.charspan is None
+    assert clean.text == "untouched" and clean.charspan == (0, 9)
+
+
+def test_apply_glyph_map_recurses_into_children() -> None:
+    from app.parser import _apply_glyph_map
+
+    parent = _el(text=f"A{PUA_FR}ica", children=[_el(text=f"O{PUA_FT}en")])
+    _apply_glyph_map([parent], {PUA_FR: "fr", PUA_FT: "ft"})
+    assert parent.text == "Africa"
+    assert parent.children[0].text == "Often"
+
+
+def test_contiguous_ranges_collapses_runs() -> None:
+    from app.parser import _contiguous_ranges
+
+    assert _contiguous_ranges([5, 6, 7, 40]) == [(5, 7), (40, 40)]
+    assert _contiguous_ranges([40, 5, 6]) == [(5, 6), (40, 40)]
+    assert _contiguous_ranges([]) == []

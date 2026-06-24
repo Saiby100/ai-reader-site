@@ -19,6 +19,22 @@ class Settings(BaseSettings):
     # OCR (CPU-bound) is only needed for scanned/image-only PDFs. Born-digital ebooks have
     # a real text layer, so it is off by default; turn on for scanned documents.
     do_ocr: bool = False
+    # Some PDFs (often re-encoded ebooks) embed fonts whose f-ligature glyphs (ft, fr, fi, fl,
+    # ff) carry no real ToUnicode mapping, so every reader falls back to a Private Use Area
+    # codepoint that renders as a blank gap — e.g. 'Often' -> 'O⟦⟧en'. When enabled, each unique
+    # broken glyph is recognised once by OCR'ing a word that contains it, then replaced
+    # everywhere; glyphs that can't be recognised fall back to full-page OCR of their pages.
+    # Born-digital PDFs (no PUA chars) are untouched.
+    ocr_fallback: bool = True
+    # Minimum number of PUA codepoints in the parsed text before ligature recovery runs. A small
+    # floor avoids spinning up OCR over a stray decorative glyph.
+    ocr_fallback_pua_threshold: int = 4
+    # How many sample occurrences of each broken glyph to OCR; the majority reading wins, which
+    # absorbs the occasional bad crop. More samples = more robust but slower per glyph.
+    glyph_ocr_samples: int = 3
+    # Resolution multiplier when rendering a page to crop a word for glyph OCR. Higher is sharper
+    # (better recognition of small body text) but uses more memory per page.
+    glyph_render_scale: float = 6.0
     # Extract embedded images so figures survive in the output. Cheap (region cropping, no
     # model inference) — required for the data URIs the reader renders.
     generate_picture_images: bool = True
