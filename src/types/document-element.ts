@@ -29,6 +29,8 @@ type ElementMeta = {
   label?: string | null;
   /** Character span [start, end] within the element's source text, for precise sub-element highlighting. */
   charspan?: [number, number] | null;
+  /** Horizontal text alignment inferred from source geometry; absent/null means default (left). PDF-only. */
+  alignment?: 'center' | 'right' | null;
 };
 
 /** Top-level document title. */

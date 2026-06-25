@@ -18,6 +18,7 @@ type RendererMap = { [T in DocumentElement as T['type']]: ElementRenderer<T> };
 const refAttrs = (el: DocumentElement) => ({
   'data-ref': el.ref ?? undefined,
   'data-page': el.page ?? undefined,
+  style: el.alignment ? { textAlign: el.alignment } : undefined,
 });
 
 export const renderers: RendererMap = {

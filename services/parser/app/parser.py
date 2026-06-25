@@ -470,7 +470,7 @@ def _build_tree(result: ConversionResult) -> list[DocumentElement]:
     elements: list[DocumentElement] = []
 
     for item, _level in doc.iterate_items():
-        meta = _element_meta(item)
+        meta = _element_meta(item, doc)
         label = getattr(item, "label", None)
 
         if isinstance(item, SectionHeaderItem):
@@ -509,8 +509,8 @@ def _build_tree(result: ConversionResult) -> list[DocumentElement]:
     return elements
 
 
-def _element_meta(item: object) -> dict[str, object]:
-    """Shared metadata carried by every element: stable ref, page, label, charspan."""
+def _element_meta(item: object, doc: object) -> dict[str, object]:
+    """Shared metadata carried by every element: ref, page, label, charspan, alignment."""
     ref = getattr(item, "self_ref", None)
     label = _enum_value(getattr(item, "label", None))
 
@@ -524,7 +524,58 @@ def _element_meta(item: object) -> dict[str, object]:
         if span is not None and len(span) == 2:
             charspan = (int(span[0]), int(span[1]))
 
-    return {"ref": ref, "page": page, "label": label, "charspan": charspan}
+    return {
+        "ref": ref,
+        "page": page,
+        "label": label,
+        "charspan": charspan,
+        "alignment": _alignment(item, doc),
+    }
+
+
+def _alignment(item: object, doc: object) -> str | None:
+    """Infer horizontal text alignment ('center' / 'right') from the item's geometry.
+
+    Docling exposes no alignment attribute, so we derive it from the element's bounding box
+    relative to its page width: a block with roughly symmetric left/right margins is centered,
+    one pushed toward the right is right-aligned. Full-width blocks (ordinary body/justified
+    text) and the default left case return ``None`` to keep the contract lean. Returns ``None``
+    whenever geometry is unavailable (e.g. DOCX/HTML/MD inputs carry no bbox). Only the
+    horizontal edges ``l``/``r`` are used, so the bbox ``coord_origin`` is irrelevant.
+    """
+    prov = getattr(item, "prov", None)
+    if not isinstance(prov, list) or not prov:
+        return None
+
+    bbox = getattr(prov[0], "bbox", None)
+    page_no = getattr(prov[0], "page_no", None)
+    if bbox is None or page_no is None:
+        return None
+
+    pages = getattr(doc, "pages", None)
+    page = pages.get(page_no) if hasattr(pages, "get") else None
+    size = getattr(page, "size", None)
+    page_width = getattr(size, "width", None)
+    if not page_width:
+        return None
+
+    left = getattr(bbox, "l", None)
+    right = getattr(bbox, "r", None)
+    if left is None or right is None:
+        return None
+
+    block_width = right - left
+    if block_width >= 0.85 * page_width:
+        return None  # full-width body/justified text — not a deliberate alignment
+
+    left_margin = left
+    right_margin = page_width - right
+    tol = 0.05 * page_width
+    if abs(left_margin - right_margin) <= tol:
+        return "center"
+    if left_margin > right_margin:
+        return "right"
+    return None
 
 
 def _code_language(item: object) -> str | None:

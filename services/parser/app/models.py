@@ -38,6 +38,9 @@ class DocumentElement(BaseModel):
     charspan: tuple[int, int] | None = None
     """Character span [start, end] within the element's source text, for precise
     sub-element highlighting / citation ranges."""
+    alignment: Literal["center", "right"] | None = None
+    """Horizontal text alignment inferred from the source geometry; ``None`` means the
+    default (left). Only set for PDFs, where bounding boxes are available."""
 
     # --- per-type payload ---
     level: int | None = None
