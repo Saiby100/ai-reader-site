@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
-"""Interactive harness for testing the parser in isolation.
+"""Parse a single document and write its ParseResponse JSON, then exit.
 
-Loads the (slow) Docling models once, then runs a long-running prompt loop.
-Enter a file path and the document is parsed via ``app.parser.parse_document``;
-a summary is printed and the full ``ParseResponse`` JSON is written to the
-``.parse-out/`` folder (git-ignored) at the parser root for inspection.
+Loads the (slow) Docling models, parses the file at the given path via
+``app.parser.parse_document``, prints a short summary, and writes the full
+``ParseResponse`` JSON to the ``.parse-out/`` folder (git-ignored) at the parser
+root. Pairs with ``scripts/render-tree.tsx`` (run from the repo root), which turns
+that JSON into the client's rendered HTML — the root ``make debug`` target chains
+both for the same file.
 
 Usage:
-    python scripts/parse_repl.py
+    python scripts/parse_file.py [path]
 
-Commands at the prompt:
-    <path>   parse the file at <path>
-    <empty>  parse the bundled sample fixture (tests/fixtures/sample.docx)
-    q        quit
+``path`` defaults to the bundled sample fixture (tests/fixtures/sample.docx).
 """
 
 from __future__ import annotations
@@ -38,15 +37,12 @@ def _summarize(resp: ParseResponse) -> str:
     return ", ".join(f"{k}={v}" for k, v in sorted(counts.items())) or "(no elements)"
 
 
-def _handle(path: Path, out_dir: Path) -> None:
+def _parse(path: Path, out_dir: Path) -> int:
     if not path.exists():
         print(f"  not found: {path}")
-        return
-    try:
-        resp = parse_document(path.read_bytes(), path.name)
-    except Exception as exc:  # noqa: BLE001 - surface any parse error and keep looping
-        print(f"  parse failed: {exc}")
-        return
+        return 1
+
+    resp = parse_document(path.read_bytes(), path.name)
 
     out_path = out_dir / f"{path.stem}.json"
     out_path.write_text(resp.model_dump_json(indent=2))
@@ -57,30 +53,19 @@ def _handle(path: Path, out_dir: Path) -> None:
         f"format={resp.metadata.format_detected}"
     )
     print(f"  -> {out_path}")
+    return 0
 
 
-def main() -> None:
+def main() -> int:
     out_dir = OUTPUT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
+    path = Path(sys.argv[1]).expanduser() if len(sys.argv) > 1 else DEFAULT_FIXTURE
+
     print(f"Output dir: {out_dir}")
     print("Loading Docling models (one-time, slow)...")
     load_models()
-    print("Ready. Enter a file path to parse, blank for the sample fixture, or 'q' to quit.")
-
-    while True:
-        try:
-            raw = input("\nfile> ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print("\nBye.")
-            break
-
-        if raw.lower() in {"q", "quit", "exit"}:
-            print("Bye.")
-            break
-
-        path = Path(raw).expanduser() if raw else DEFAULT_FIXTURE
-        _handle(path, out_dir)
+    return _parse(path, out_dir)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
