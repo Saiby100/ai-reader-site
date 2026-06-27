@@ -269,29 +269,109 @@ def _resolve_glyph_map(
         pdf.close()
 
 
-def _apply_glyph_map(elements: list[DocumentElement], mapping: dict[str, str]) -> None:
-    """Replace recognised glyphs throughout the tree, absorbing Docling's pad spaces.
+def _collect_glyph_words(
+    file_bytes: bytes, codes: set[str]
+) -> dict[str, list[tuple[str, str]]]:
+    """Read the true in-word context of every broken glyph from the raw PDF text layer.
 
-    Docling renders an unmapped glyph flanked by an inserted space on each side
-    ('O ⟦⟧ en'); stripping one optional space on each side restores 'Often' while leaving
-    real word-boundary spaces (which Docling keeps separately) intact. ``charspan`` is
-    cleared on any rewritten element since the text offsets shift.
+    Docling pads each broken glyph with spaces that are indistinguishable from real word
+    boundaries, and it pads inconsistently — so its text alone cannot tell ``After`` (a-ft-er,
+    a pad space) from ``came from`` (a real space): both arrive as ``X ⟦⟧ Y``. pdfium's raw
+    text layer keeps the original spacing, so for each occurrence we record the contiguous
+    word letters touching the glyph as ``(prefix, suffix)`` (lowercased). An *empty* prefix or
+    suffix means a real word boundary on that side; a non-empty one means letters Docling
+    split off with a pad space. ``_apply_glyph_map`` matches these against the padded Docling
+    text to strip only the pads. Keyed by glyph code; values sorted by descending prefix
+    length so the longest (most specific) match wins (e.g. 'carefree' over 'free').
+    """
+    import pypdfium2 as pdfium
+
+    words: dict[str, set[tuple[str, str]]] = {c: set() for c in codes}
+    try:
+        pdf = pdfium.PdfDocument(file_bytes)
+    except Exception:
+        logger.warning("Could not open PDF for glyph-boundary scan", exc_info=True)
+        return {c: [] for c in codes}
+    try:
+        for pidx in range(len(pdf)):
+            text = pdf[pidx].get_textpage().get_text_range()
+            n = len(text)
+            for i, ch in enumerate(text):
+                if ch not in codes:
+                    continue
+                a = i
+                while a > 0 and _is_word_char(text[a - 1]):
+                    a -= 1
+                b = i
+                while b + 1 < n and _is_word_char(text[b + 1]):
+                    b += 1
+                words[ch].add((text[a:i].lower(), text[i + 1 : b + 1].lower()))
+    except Exception:
+        logger.warning("Glyph-boundary scan failed; spacing may be approximate", exc_info=True)
+    finally:
+        pdf.close()
+    return {c: sorted(v, key=lambda ps: -len(ps[0])) for c, v in words.items()}
+
+
+def _apply_glyph_map(
+    elements: list[DocumentElement],
+    mapping: dict[str, str],
+    glyph_words: dict[str, list[tuple[str, str]]] | None = None,
+) -> None:
+    """Replace recognised glyphs throughout the tree, stripping only Docling's pad spaces.
+
+    Docling renders an unmapped glyph flanked by inserted spaces ('O ⟦⟧ en' for 'Often',
+    'extraordinary ⟦⟧eedom' for 'extraordinary freedom'). Whether a flanking space is a pad to
+    drop or a real boundary to keep can't be told from Docling's text, so we match each
+    occurrence's surrounding letters against the raw-layer truth from ``_collect_glyph_words``:
+    a space is stripped only where the raw layer had letters on that side. With no boundary
+    data we keep both spaces (never fuse two words). ``charspan`` is cleared on any rewritten
+    element since the text offsets shift.
     """
     if not mapping:
         return
-    subs = [
-        (re.compile(rf" ?{re.escape(code)} ?"), letters)
-        for code, letters in mapping.items()
-    ]
+    glyph_words = glyph_words or {}
+    cls = "[" + "".join(re.escape(code) for code in mapping) + "]"
+    pattern = re.compile(rf" ?{cls} ?")
+
+    def replace(text: str) -> str:
+        def sub(m: re.Match[str]) -> str:
+            matched = m.group()
+            code = next(c for c in matched if c in mapping)
+            letters = mapping[code]
+            had_lead = matched[0] == " "
+            had_trail = matched[-1] == " "
+
+            before = text[: m.start()]
+            after = text[m.end() :]
+            pa = len(before)
+            while pa > 0 and _is_word_char(before[pa - 1]):
+                pa -= 1
+            cand_prefix = before[pa:].lower()
+            pb = 0
+            while pb < len(after) and _is_word_char(after[pb]):
+                pb += 1
+            cand_suffix = after[:pb].lower()
+
+            strip_lead = strip_trail = False
+            for prefix, suffix in glyph_words.get(code, ()):
+                if cand_prefix.endswith(prefix) and cand_suffix.startswith(suffix):
+                    strip_lead = bool(prefix)  # letters before glyph in raw -> leading pad
+                    strip_trail = bool(suffix)
+                    break
+
+            lead = "" if (had_lead and strip_lead) else (" " if had_lead else "")
+            trail = "" if (had_trail and strip_trail) else (" " if had_trail else "")
+            return f"{lead}{letters}{trail}"
+
+        return pattern.sub(sub, text)
 
     def fix(el: DocumentElement) -> None:
         for field in ("text", "html"):
             original = getattr(el, field)
             if not original:
                 continue
-            updated = original
-            for pattern, letters in subs:
-                updated = pattern.sub(letters, updated)
+            updated = replace(original)
             if updated != original:
                 setattr(el, field, updated)
                 el.charspan = None
@@ -379,7 +459,8 @@ def _repair_lossy_ligatures(
         total,
         {f"U+{ord(k):04X}": v for k, v in mapping.items()},
     )
-    _apply_glyph_map(elements, mapping)
+    glyph_words = _collect_glyph_words(file_bytes, set(counts))
+    _apply_glyph_map(elements, mapping, glyph_words)
     if unresolved_pages:
         logger.info("Unrecognised glyph(s); OCR backstop on pages %s", sorted(unresolved_pages))
         elements = _splice_ocr_pages(tmp_path, elements, unresolved_pages, errors, links_by_page)
