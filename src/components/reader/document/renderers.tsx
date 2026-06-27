@@ -22,14 +22,17 @@ const refAttrs = (el: DocumentElement) => ({
 });
 
 /**
- * Alignment style for an image. An `<img>` is inline, so `text-align` on the img
- * itself does nothing (it aligns the img's content, not the img) — center/right it
- * with auto margins on a block-displayed image instead.
+ * Layout style for an image. Every image is `display: block` so it (a) carries the
+ * vertical margin that keeps surrounding text off its top/bottom edges, and (b) can be
+ * horizontally aligned with auto margins — `text-align` does nothing on an inline `<img>`,
+ * and vertical margins have no effect on inline boxes. The vertical margin is set here
+ * rather than via a Tailwind `[&_img]` rule because the inline style would override it.
  */
-const imageStyle = (el: ImageElement): CSSProperties | undefined => {
-  if (el.alignment === 'center') return { display: 'block', margin: '0 auto' };
-  if (el.alignment === 'right') return { display: 'block', marginLeft: 'auto' };
-  return undefined;
+const imageStyle = (el: ImageElement): CSSProperties => {
+  const base: CSSProperties = { display: 'block', marginTop: '1.5rem', marginBottom: '1.5rem' };
+  if (el.alignment === 'center') return { ...base, marginLeft: 'auto', marginRight: 'auto' };
+  if (el.alignment === 'right') return { ...base, marginLeft: 'auto' };
+  return base;
 };
 
 /**
