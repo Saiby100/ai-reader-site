@@ -1,5 +1,5 @@
-import type { JSX, ReactNode } from 'react';
-import type { DocumentElement } from '@/types/document-element';
+import type { CSSProperties, JSX, ReactNode } from 'react';
+import type { DocumentElement, ImageElement } from '@/types/document-element';
 
 /**
  * Renders one element. `children` is the already-rendered subtree (for elements
@@ -20,6 +20,17 @@ const refAttrs = (el: DocumentElement) => ({
   'data-page': el.page ?? undefined,
   style: el.alignment ? { textAlign: el.alignment } : undefined,
 });
+
+/**
+ * Alignment style for an image. An `<img>` is inline, so `text-align` on the img
+ * itself does nothing (it aligns the img's content, not the img) — center/right it
+ * with auto margins on a block-displayed image instead.
+ */
+const imageStyle = (el: ImageElement): CSSProperties | undefined => {
+  if (el.alignment === 'center') return { display: 'block', margin: '0 auto' };
+  if (el.alignment === 'right') return { display: 'block', marginLeft: 'auto' };
+  return undefined;
+};
 
 /**
  * Wraps an element's text in an anchor when it carries a link. External links
@@ -62,7 +73,9 @@ export const renderers: RendererMap = {
   table: (el) => (
     <div {...refAttrs(el)} dangerouslySetInnerHTML={{ __html: el.html }} />
   ),
-  image: (el) => <img {...refAttrs(el)} src={el.data_uri} alt="" />,
+  image: (el) => (
+    <img {...refAttrs(el)} style={imageStyle(el)} src={el.data_uri} alt="" />
+  ),
   code: (el) => (
     <pre {...refAttrs(el)}>
       <code data-language={el.language ?? undefined}>{el.text}</code>
