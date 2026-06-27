@@ -41,6 +41,12 @@ class DocumentElement(BaseModel):
     alignment: Literal["center", "right"] | None = None
     """Horizontal text alignment inferred from the source geometry; ``None`` means the
     default (left). Only set for PDFs, where bounding boxes are available."""
+    link_href: str | None = None
+    """External URL this element hyperlinks to, when it sits under a PDF /URI link
+    annotation (or a hyperlink in docx/html/md)."""
+    link_target_page: int | None = None
+    """1-based page this element links to via an internal PDF /GoTo link annotation,
+    for in-document navigation (TOC entries, cross-references)."""
 
     # --- per-type payload ---
     level: int | None = None

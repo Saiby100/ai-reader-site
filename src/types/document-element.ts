@@ -31,6 +31,10 @@ type ElementMeta = {
   charspan?: [number, number] | null;
   /** Horizontal text alignment inferred from source geometry; absent/null means default (left). PDF-only. */
   alignment?: 'center' | 'right' | null;
+  /** External URL this element hyperlinks to (PDF /URI link, or a docx/html/md hyperlink), when any. */
+  link_href?: string | null;
+  /** 1-based page this element links to via an internal PDF /GoTo link, for in-document navigation. */
+  link_target_page?: number | null;
 };
 
 /** Top-level document title. */

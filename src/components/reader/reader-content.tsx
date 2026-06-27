@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef, type ReactNode } from 'react';
+import { forwardRef, useCallback, type MouseEvent, type ReactNode } from 'react';
 
 type ReaderContentProps = {
   /** Rendered document content (the parsed element tree as React nodes) */
@@ -11,10 +11,23 @@ type ReaderContentProps = {
 
 export const ReaderContent = forwardRef<HTMLDivElement, ReaderContentProps>(
   ({ children, onScroll }, ref) => {
+    // Internal page-jump links (rendered as `<a data-link-page>` by the renderer registry)
+    // are handled here via event delegation, so the renderers stay server-safe. Scrolls to
+    // the first element originating from the target page.
+    const onClick = useCallback((event: MouseEvent<HTMLElement>) => {
+      const anchor = (event.target as HTMLElement).closest('a[data-link-page]');
+      if (!anchor) return;
+      event.preventDefault();
+      const page = anchor.getAttribute('data-link-page');
+      const target = event.currentTarget.querySelector(`[data-page="${page}"]`);
+      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, []);
+
     return (
       <main
         ref={ref}
         onScroll={onScroll}
+        onClick={onClick}
         className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-sand"
       >
         <div
@@ -27,7 +40,8 @@ export const ReaderContent = forwardRef<HTMLDivElement, ReaderContentProps>(
             [&_blockquote]:border-l-[3px] [&_blockquote]:border-amber [&_blockquote]:bg-amber-light [&_blockquote]:pl-3.5 [&_blockquote]:py-1.5 [&_blockquote]:rounded-r-[4px] [&_blockquote]:my-5
             [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-5
             [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-5
-            [&_li]:mb-1.5"
+            [&_li]:mb-1.5
+            [&_a]:text-amber [&_a]:underline [&_a]:decoration-amber/40 [&_a]:underline-offset-2 [&_a]:cursor-pointer [&_a:hover]:decoration-amber"
         >
           {children}
         </div>

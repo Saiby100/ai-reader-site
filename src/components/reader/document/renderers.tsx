@@ -21,17 +21,41 @@ const refAttrs = (el: DocumentElement) => ({
   style: el.alignment ? { textAlign: el.alignment } : undefined,
 });
 
+/**
+ * Wraps an element's text in an anchor when it carries a link. External links
+ * (`link_href`) open in a new tab; internal page-jumps (`link_target_page`) render an
+ * anchor tagged with `data-link-page` — `ReaderContent` intercepts the click and scrolls
+ * to that page, so no per-element handler is needed here (keeps renderers server-safe).
+ */
+const linkWrap = (el: DocumentElement, content: ReactNode): ReactNode => {
+  if (el.link_href) {
+    return (
+      <a href={el.link_href} target="_blank" rel="noopener noreferrer">
+        {content}
+      </a>
+    );
+  }
+  if (el.link_target_page != null) {
+    return (
+      <a href="#" data-link-page={el.link_target_page}>
+        {content}
+      </a>
+    );
+  }
+  return content;
+};
+
 export const renderers: RendererMap = {
-  title: (el) => <h1 {...refAttrs(el)}>{el.text}</h1>,
+  title: (el) => <h1 {...refAttrs(el)}>{linkWrap(el, el.text)}</h1>,
   heading: (el) => {
     const level = Math.min(Math.max(el.level, 1), 6);
     const Tag = `h${level}` as keyof JSX.IntrinsicElements;
-    return <Tag {...refAttrs(el)}>{el.text}</Tag>;
+    return <Tag {...refAttrs(el)}>{linkWrap(el, el.text)}</Tag>;
   },
-  paragraph: (el) => <p {...refAttrs(el)}>{el.text}</p>,
+  paragraph: (el) => <p {...refAttrs(el)}>{linkWrap(el, el.text)}</p>,
   list_item: (el, children) => (
     <li {...refAttrs(el)}>
-      {el.text}
+      {linkWrap(el, el.text)}
       {children}
     </li>
   ),
@@ -50,5 +74,5 @@ export const renderers: RendererMap = {
       {el.text}
     </span>
   ),
-  caption: (el) => <figcaption {...refAttrs(el)}>{el.text}</figcaption>,
+  caption: (el) => <figcaption {...refAttrs(el)}>{linkWrap(el, el.text)}</figcaption>,
 };

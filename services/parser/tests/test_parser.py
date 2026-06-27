@@ -59,9 +59,18 @@ class _Enum:
 
 
 class _Bbox:
-    def __init__(self, left: float, right: float) -> None:
+    def __init__(
+        self, left: float, right: float, top: float = 0.0, bottom: float = 0.0
+    ) -> None:
         self.l = left
         self.r = right
+        self.t = top
+        self.b = bottom
+
+    def to_top_left_origin(self, page_height: float) -> "_Bbox":
+        # Test bboxes are supplied already in top-left coords; identity keeps the
+        # overlap math in the assertions easy to read.
+        return self
 
 
 class _Prov:
@@ -77,13 +86,14 @@ class _Prov:
 
 
 class _Size:
-    def __init__(self, width: float) -> None:
+    def __init__(self, width: float, height: float = 0.0) -> None:
         self.width = width
+        self.height = height
 
 
 class _Page:
-    def __init__(self, width: float) -> None:
-        self.size = _Size(width)
+    def __init__(self, width: float, height: float = 0.0) -> None:
+        self.size = _Size(width, height)
 
 
 class _Doc:
@@ -136,6 +146,7 @@ def test_element_meta_extracts_ref_page_label_charspan() -> None:
         "label": "text",
         "charspan": (18, 24),
         "alignment": None,
+        "link_href": None,
     }
 
 
@@ -149,7 +160,23 @@ def test_element_meta_tolerates_missing_provenance() -> None:
         "label": None,
         "charspan": None,
         "alignment": None,
+        "link_href": None,
     }
+
+
+def test_element_meta_extracts_external_hyperlink() -> None:
+    from app.parser import _element_meta
+
+    class _Url:
+        """Stand-in for Docling's AnyUrl, which stringifies to the href."""
+
+        def __str__(self) -> str:
+            return "https://example.com/"
+
+    item = _Item(self_ref="#/texts/3", prov=[_Prov(page_no=1, charspan=(0, 5))], hyperlink=_Url())
+    assert _element_meta(item, _Doc())["link_href"] == "https://example.com/"
+    # no hyperlink attribute at all -> None
+    assert _element_meta(_Item(self_ref="#/x"), _Doc())["link_href"] is None
 
 
 def test_alignment_detects_center_right_and_default() -> None:
@@ -253,3 +280,53 @@ def test_contiguous_ranges_collapses_runs() -> None:
     assert _contiguous_ranges([5, 6, 7, 40]) == [(5, 7), (40, 40)]
     assert _contiguous_ranges([40, 5, 6]) == [(5, 6), (40, 40)]
     assert _contiguous_ranges([]) == []
+
+
+def _link_item(page_no: int, left: float, top: float, right: float, bottom: float):
+    """An item (with a top-left bbox) + a doc whose page has a known height."""
+    item = _Item(
+        prov=[_Prov(page_no=page_no, charspan=(0, 1), bbox=_Bbox(left, right, top, bottom))]
+    )
+    doc = _Doc({page_no: _Page(width=612, height=792)})
+    return item, doc
+
+
+def test_match_link_binds_element_covered_by_link() -> None:
+    from app.parser import _match_link
+
+    # element bbox sits fully inside the link rect -> coverage 1.0 -> target page bound
+    item, doc = _link_item(1, left=72, top=79, right=176, bottom=96)
+    links = {1: [((72.0, 72.0, 220.0, 97.0), 2)]}
+    assert _match_link(item, doc, links) == 2
+
+
+def test_match_link_skips_below_threshold() -> None:
+    from app.parser import _match_link
+
+    # link grazes only a small slice of the element -> below 0.5 coverage -> no bind
+    item, doc = _link_item(1, left=72, top=79, right=200, bottom=96)
+    links = {1: [((180.0, 79.0, 220.0, 96.0), 2)]}
+    assert _match_link(item, doc, links) is None
+
+
+def test_match_link_returns_none_without_matching_links_or_geometry() -> None:
+    from app.parser import _match_link
+
+    item, doc = _link_item(1, left=72, top=79, right=176, bottom=96)
+    # empty map, and a link only on a different page
+    assert _match_link(item, doc, {}) is None
+    assert _match_link(item, doc, {2: [((0.0, 0.0, 500.0, 500.0), 3)]}) is None
+    # link present on the page, but the item carries no bbox
+    no_bbox = _Item(prov=[_Prov(page_no=1, charspan=(0, 1))])
+    assert _match_link(no_bbox, doc, {1: [((0.0, 0.0, 500.0, 500.0), 2)]}) is None
+
+
+def test_coverage_is_fraction_of_inner_overlapped() -> None:
+    from app.parser import _coverage
+
+    # inner fully inside outer -> 1.0
+    assert _coverage((10, 10, 20, 20), (0, 0, 100, 100)) == 1.0
+    # no overlap -> 0.0
+    assert _coverage((0, 0, 10, 10), (50, 50, 60, 60)) == 0.0
+    # half of inner's area overlaps outer
+    assert _coverage((0, 0, 10, 10), (5, 0, 100, 100)) == 0.5
