@@ -77,7 +77,7 @@ export const renderers: RendererMap = {
     <div {...refAttrs(el)} dangerouslySetInnerHTML={{ __html: el.html }} />
   ),
   image: (el) => (
-    <img {...refAttrs(el)} style={imageStyle(el)} src={el.data_uri} alt="" />
+    <img {...refAttrs(el)} style={imageStyle(el)} src={el.data_uri} alt="" data-zoomable />
   ),
   code: (el) => (
     <pre {...refAttrs(el)}>

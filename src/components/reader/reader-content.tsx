@@ -2,6 +2,9 @@
 
 import { forwardRef, useCallback, type MouseEvent, type ReactNode } from 'react';
 
+import { useImageLightbox } from '@/hooks/use-image-lightbox';
+import { ImageLightbox } from './image-lightbox';
+
 type ReaderContentProps = {
   /** Rendered document content (the parsed element tree as React nodes) */
   children: ReactNode;
@@ -11,17 +14,32 @@ type ReaderContentProps = {
 
 export const ReaderContent = forwardRef<HTMLDivElement, ReaderContentProps>(
   ({ children, onScroll }, ref) => {
-    // Internal page-jump links (rendered as `<a data-link-page>` by the renderer registry)
-    // are handled here via event delegation, so the renderers stay server-safe. Scrolls to
-    // the first element originating from the target page.
-    const onClick = useCallback((event: MouseEvent<HTMLElement>) => {
-      const anchor = (event.target as HTMLElement).closest('a[data-link-page]');
-      if (!anchor) return;
-      event.preventDefault();
-      const page = anchor.getAttribute('data-link-page');
-      const target = event.currentTarget.querySelector(`[data-page="${page}"]`);
-      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, []);
+    const { src: zoomedSrc, open: openZoom, close: closeZoom } = useImageLightbox();
+
+    // Clicks on rendered content are handled here via event delegation, so the renderers stay
+    // server-safe. Two cases: zoomable images (rendered as `<img data-zoomable>`) open the
+    // lightbox; internal page-jump links (`<a data-link-page>`) scroll to the first element
+    // originating from the target page.
+    const onClick = useCallback(
+      (event: MouseEvent<HTMLElement>) => {
+        const target = event.target as HTMLElement;
+
+        const image = target.closest('img[data-zoomable]');
+        if (image) {
+          const src = image.getAttribute('src');
+          if (src) openZoom(src);
+          return;
+        }
+
+        const anchor = target.closest('a[data-link-page]');
+        if (!anchor) return;
+        event.preventDefault();
+        const page = anchor.getAttribute('data-link-page');
+        const pageTarget = event.currentTarget.querySelector(`[data-page="${page}"]`);
+        pageTarget?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      },
+      [openZoom]
+    );
 
     return (
       <main
@@ -33,6 +51,7 @@ export const ReaderContent = forwardRef<HTMLDivElement, ReaderContentProps>(
         <div
           className="mx-auto max-w-[860px] w-full px-8 py-12 font-serif text-[16.5px] leading-[1.8] text-ink wrap-anywhere
             [&_*]:max-w-full [&_pre]:whitespace-pre-wrap
+            [&_img]:block [&_img]:mx-auto [&_img]:my-6 [&_img]:h-auto [&_img]:w-auto [&_img]:max-h-[420px] [&_img]:rounded-[4px] [&_img]:object-contain [&_img]:cursor-zoom-in
             [&_h1]:font-serif [&_h1]:text-[30px] [&_h1]:font-semibold [&_h1]:leading-[1.25] [&_h1]:text-ink [&_h1]:mb-3.5
             [&_h2]:font-sans [&_h2]:text-[14px] [&_h2]:font-semibold [&_h2]:text-ink [&_h2]:mb-2 [&_h2]:tracking-[0.01em]
             [&_h3]:font-sans [&_h3]:text-[13px] [&_h3]:font-semibold [&_h3]:text-ink [&_h3]:mb-2
@@ -45,6 +64,7 @@ export const ReaderContent = forwardRef<HTMLDivElement, ReaderContentProps>(
         >
           {children}
         </div>
+        <ImageLightbox src={zoomedSrc} onClose={closeZoom} />
       </main>
     );
   }
