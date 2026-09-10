@@ -1,72 +1,106 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this
+repository.
 
 ## Commands
 
 ```bash
-npm run dev       # Start Next.js dev server
-npm run build     # Production build
-npm run start     # Start production server
-npm run lint      # Lint (ESLint with next config)
+make install           # create .venv (python3.11) and install with dev extras
+make dev               # uvicorn with auto-reload on :8000
+make start             # uvicorn without reload
+make test              # pytest
+make debug FILE=…      # parse a file to out/<name>.{json,html}
+make clean             # drop out/
 ```
+
+All targets use `.venv/bin/…` directly — there is no need to activate the venv.
 
 ## Architecture
 
-**Next.js 16 app** (App Router, file-based routing) — an AI-powered reading assistant for complex articles. Uses Vercel AI SDK with Google AI provider, Tailwind CSS v4, and React 19.
+A single FastAPI service wrapping [Docling](https://github.com/docling-project/docling). It
+converts uploaded documents into a structured tree and returns it as JSON; it also renders
+that tree to standalone HTML for debugging.
 
-### Routes (`src/app/`)
+```
+app/
+  main.py         FastAPI app — routes (/health, /capabilities, /parse), bearer auth,
+                  upload validation. parse_document runs in a thread (it is CPU-bound).
+  parser.py       all Docling work: converter setup, tree building, PDF link extraction,
+                  ligature/PUA recovery. `parse_document(bytes, filename)` is the only
+                  entry point; everything else is a `_`-prefixed helper.
+  models.py       the wire contract (pydantic) — ParseResponse / DocumentElement / …
+  render_html.py  document tree → standalone HTML
+  config.py       pydantic-settings `Settings`, exported as the module-level `settings`
+scripts/parse_file.py   the debug CLI behind `make debug`
+tests/                  pytest
+```
 
-- `page.tsx` — Main page
-- `layout.tsx` — Root layout with Geist font
-- `api/chat/route.ts` — AI chat API endpoint (Vercel AI SDK)
+### Key patterns
 
-### Key Patterns
+- **One entry point per module boundary.** Nothing Docling-specific leaks past
+  `parser.py` — no bounding boxes, no provenance objects. `models.py` is the boundary.
+- **Settings are read once.** Import `settings` from `app.config`; never call `Settings()`
+  again. Unknown keys in `.env` are rejected at startup.
+- **Lazy heavy objects.** The converter and OCR engines are module-level globals built on
+  first use (`load_models`, `_get_ocr_converter`, `_get_ocr_engine`) so importing the
+  package stays cheap.
+- **Renderer registry.** `render_html.RENDERERS` maps every `ElementType` to a function; a
+  module-level assert against `get_args(ElementType)` makes a missing renderer an import
+  error. Add a type to `ElementType` → add a renderer.
+- **Escaping in the renderer.** Text, attributes and code are `html.escape`d; table `html`
+  and image `data_uri` are already markup/URI and pass through verbatim.
 
-- **Path alias** — `@/*` maps to `./src/*` (configured in `tsconfig.json`).
-- **Styling** — Tailwind CSS v4 (PostCSS plugin). No CSS-in-JS.
-- **AI SDK** — `ai` + `@ai-sdk/google` + `@ai-sdk/react` for streaming chat.
-- **TypeScript strict mode** enabled.
+## Code Style
+
+- Small, focused modules. Group closely related functions in the same file rather than
+  splitting one function per file.
+- `from __future__ import annotations` at the top of every module.
+- Full type hints on every function signature; no bare `dict`/`list` returns where a
+  concrete type is known.
+- Private helpers are `_`-prefixed and defined below the public functions that use them.
+- 4-space indent, double quotes, 100-column lines.
+- Comments explain *why*, not *what* — the Docling workarounds especially. Keep the
+  existing explanatory comments when refactoring around them.
+
+## Type Definition Guidelines
+
+- **Pydantic models for anything on the wire.** Plain dataclasses/tuples are fine for
+  internals.
+- **Document every field**: each field in a pydantic model gets a docstring line
+  (`"""..."""` directly beneath it) describing its purpose.
+- **Prefer narrow types**: `Literal[...]` unions over plain `str` for fields with known
+  values (see `ElementType`, `accelerator_device`).
+- **No bare `Any`**: use `object` or a concrete type.
+
+## Testing
+
+- `tests/test_parser.py` builds hand-rolled fake Docling objects (`_Item`, `_Doc`, `_Prov`,
+  …) so unit tests run without loading models. Extend those fakes rather than importing
+  Docling in tests.
+- `tests/test_render_html.py` builds `DocumentElement`s directly and asserts on the exact
+  markup string.
+- Endpoint tests use FastAPI's `TestClient`. Note that importing `app.main` constructs
+  `Settings`, so the repo-root `.env` must contain only parser keys.
+
+## Commit Guidelines
+
+- **One commit per task**: separate tasks must be committed separately — never bundle
+  unrelated changes into a single commit. If you completed multiple tasks before
+  committing, create one commit per task.
+- **Ask when unsure**: if it's unclear whether changes belong in one commit or multiple,
+  ask before committing.
 
 ## IMPORTANT: Always Clarify Before Acting
 
 **Do NOT assume requirements. Always ask questions first.**
 
-Before starting any task — especially feature work, refactors, or anything with ambiguity — ask clarifying questions to fully understand what is expected. Do not guess at intent, scope, or implementation details. It is always better to ask one too many questions than to build the wrong thing.
-
-## Code Style
-
-- Prefer small, focused files with utility functions over large files with many functions. Group closely related functions together in the same file.
-- TypeScript strict mode
-- 2-space indent, single quotes, 100 print width
-
-## Component Definition Style
-
-- **Do not use `React.FC`**: Define components as plain arrow functions with props typed inline — `const Foo = ({ bar }: FooProps) => { ... }`. `React.FC` adds no value in React 18+ and is avoided here.
-- **Server Components by default**: Only add `'use client'` when the component needs interactivity, hooks, or browser APIs.
-
-## UI Component Guidelines
-
-- **Keep pages thin**: Page files in `app/` should primarily compose components and manage data fetching — not contain complex rendering logic.
-- **Extract logic into custom hooks**: Move data fetching, subscriptions, and non-trivial logic out of page files into custom hooks in `src/hooks/`. Page files should read like a declarative composition of hooks and components.
-- **Organize hooks by domain entity, not by page or query**: Group related queries and mutations into a single hook file per domain entity. Add new queries to the existing entity hook rather than creating a new hook file per query.
-- **Single responsibility**: Each component should do one thing. Prefer focused components over monolithic pages that render everything inline.
-- **Composable and prop-driven**: Components should accept props for data and callbacks — avoid reaching into global state from deep UI components.
-- **Avoid premature abstraction**: Don't create a wrapper component for something used only once. Extract when there's actual reuse or the file becomes hard to follow.
-
-## Type Definition Guidelines
-
-- **Use `type` over `interface`**: Prefer `type` for consistency. Use `interface` only when declaration merging is needed.
-- **No `any`**: Use `unknown` for truly unknown data, or type it properly. `Record<string, unknown>` over `Record<string, any>`.
-- **Prefer narrow types**: Use string literal unions over plain `string` for fields with known values.
-- **Props types next to components**: Component prop types should be defined in the same file as the component, not in a separate types file.
-- **Document type fields**: Every field in a `type` definition must have a brief JSDoc comment (`/** ... */`) describing its purpose.
-
-## Commit Guidelines
-
-- **One commit per task**: Separate tasks must be committed separately — never bundle unrelated changes into a single commit. If you completed multiple tasks before committing, create one commit per task.
-- **Ask when unsure**: If it's unclear whether changes belong in one commit or multiple, ask before committing.
+Before starting any task — especially feature work, refactors, or anything with ambiguity —
+ask clarifying questions to fully understand what is expected. Do not guess at intent,
+scope, or implementation details. It is always better to ask one too many questions than to
+build the wrong thing.
 
 ## Maintaining this file
 
-When making changes that affect architecture, commands, key patterns, or project structure, update the relevant sections of this CLAUDE.md to keep it accurate.
+When making changes that affect architecture, commands, key patterns, or project structure,
+update the relevant sections of this CLAUDE.md to keep it accurate.
