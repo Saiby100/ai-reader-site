@@ -565,7 +565,7 @@ def _build_tree(
             level = item.level if hasattr(item, "level") else 1
             elements.append(DocumentElement(type="heading", level=level, text=item.text, **meta))
         elif isinstance(item, TableItem):
-            html = item.export_to_html() if hasattr(item, "export_to_html") else None
+            html = _table_html_with_links(item, doc, links_by_page or {})
             text = item.text if hasattr(item, "text") else None
             elements.append(DocumentElement(type="table", html=html, text=text, **meta))
         elif isinstance(item, ListItem):
@@ -786,6 +786,94 @@ def _match_link(
             best_cov = cov
             best_page = target_page
     return best_page
+
+
+# Matches one table cell tag and its inner HTML: (open tag, tag name, inner, close tag).
+# Non-greedy + DOTALL; the 1:1 tag/cell count guard in ``_inject_cell_links`` keeps this from
+# being applied to tables whose cells nest markup the simple match can't bracket.
+_CELL_TAG_RE = re.compile(r"(<(t[dh])\b[^>]*>)(.*?)(</\2\s*>)", re.DOTALL | re.IGNORECASE)
+
+
+def _table_html_with_links(
+    item: object,
+    doc: object,
+    links_by_page: dict[int, list[tuple[Rect, int]]],
+) -> str | None:
+    """Export a table to HTML, wrapping each cell that sits over a /GoTo link in a page-jump anchor.
+
+    Pass ``doc``: the no-arg ``export_to_html()`` is deprecated and returns an empty string for
+    some tables (e.g. a ``document_index`` TOC), silently dropping them. Beyond that, Docling
+    collapses a whole table into one element, so a TOC's per-row links would be lost — one element
+    carries only one ``link_target_page``. We match each cell's bbox against the page's link rects
+    (the coverage test from ``_match_link``) and inject ``<a data-link-page>`` into the exported
+    HTML. Cells align to Docling's ``<td>``/``<th>`` tags by document order; injection is skipped
+    (HTML returned unchanged) unless that 1:1 alignment holds and at least one cell matches a link,
+    so ordinary tables are untouched.
+    """
+    html = item.export_to_html(doc=doc) if hasattr(item, "export_to_html") else None
+    if not html or not links_by_page:
+        return html
+
+    data = getattr(item, "data", None)
+    cells = list(getattr(data, "table_cells", None) or [])
+    prov = getattr(item, "prov", None)
+    page_no = getattr(prov[0], "page_no", None) if isinstance(prov, list) and prov else None
+    page_links = links_by_page.get(page_no) if page_no else None
+    if not cells or not page_links:
+        return html
+
+    pages = getattr(doc, "pages", None)
+    page = pages.get(page_no) if hasattr(pages, "get") else None
+    page_height = getattr(getattr(page, "size", None), "height", None)
+
+    targets = [_cell_link_target(cell, page_links, page_height) for cell in cells]
+    if not any(t is not None for t in targets):
+        return html
+    return _inject_cell_links(html, targets)
+
+
+def _cell_link_target(
+    cell: object, page_links: list[tuple[Rect, int]], page_height: float | None
+) -> int | None:
+    """Target page of the /GoTo link most covered by ``cell``'s bbox, above the threshold, or None."""
+    bbox = getattr(cell, "bbox", None)
+    if bbox is None:
+        return None
+    origin = getattr(getattr(bbox, "coord_origin", None), "value", None)
+    if origin == "BOTTOMLEFT" and page_height:
+        bbox = bbox.to_top_left_origin(page_height)
+    rect: Rect = (bbox.l, bbox.t, bbox.r, bbox.b)
+
+    best: int | None = None
+    best_cov = _LINK_COVERAGE_THRESHOLD
+    for link_rect, target in page_links:
+        cov = _coverage(rect, link_rect)
+        if cov >= best_cov:
+            best_cov = cov
+            best = target
+    return best
+
+
+def _inject_cell_links(html: str, targets: list[int | None]) -> str:
+    """Wrap each cell's inner HTML in a page-jump anchor where ``targets`` has a page.
+
+    ``targets`` is indexed by document order of the table's cells; it must line up 1:1 with the
+    ``<td>``/``<th>`` tags Docling emitted, or we return the HTML untouched rather than risk
+    mangling a table whose structure the simple tag scan can't track.
+    """
+    if len(_CELL_TAG_RE.findall(html)) != len(targets):
+        return html
+
+    it = iter(targets)
+
+    def repl(m: re.Match[str]) -> str:
+        target = next(it)
+        if target is None:
+            return m.group(0)
+        open_tag, inner, close_tag = m.group(1), m.group(3), m.group(4)
+        return f'{open_tag}<a href="#" data-link-page="{target}">{inner}</a>{close_tag}'
+
+    return _CELL_TAG_RE.sub(repl, html)
 
 
 def _code_language(item: object) -> str | None:
