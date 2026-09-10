@@ -23,3 +23,11 @@ dev = [
     "pytest>=8.0",
     "httpx>=0.27",
 ]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+# Only the service package ships; scripts/ and tests/ stay development-only.
+[tool.setuptools]
+packages = ["app"]
