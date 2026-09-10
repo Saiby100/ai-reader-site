@@ -1,5 +1,9 @@
-node_modules
-.next
 .git
+.venv
 .env*
-services
+out
+tests
+scripts
+__pycache__
+*.egg-info
+.pytest_cache

@@ -1,19 +1,8 @@
 services:
-  web:
+  parser:
     build: .
     ports:
-      - "3000:3000"
-    depends_on:
-      parser:
-        condition: service_healthy
-    environment:
-      - PARSER_SERVICE_URL=http://parser:8000
-      - PARSER_SERVICE_SECRET=dev-secret
-
-  parser:
-    build: ./services/parser
-    expose:
-      - "8000"
+      - "8000:8000"
     environment:
       - SERVICE_SECRET=dev-secret
       - LOG_LEVEL=info

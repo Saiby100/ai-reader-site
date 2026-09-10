@@ -1,24 +1,31 @@
-PARSER_DIR := services/parser
+VENV := .venv/bin
 
-.PHONY: debug parse render
+.PHONY: install dev start test debug clean
 
-# Parse FILE through the parser package -> services/parser/.parse-out/<name>.json
-# Usage: make parse FILE=path/to/document.pdf
-parse:
-	@test -n "$(FILE)" || { echo "FILE is required, e.g. make parse FILE=path/to/doc.pdf"; exit 1; }
-	cd $(PARSER_DIR) && .venv/bin/python scripts/parse_file.py "$(abspath $(FILE))"
+# Create the venv and install the package with dev extras
+install:
+	python3.11 -m venv .venv
+	$(VENV)/pip install -e ".[dev]"
 
-# Render an already-parsed tree to the client's HTML -> services/parser/.parse-out/<name>.html
-# NAME is the filename stem of a .json already in .parse-out/ (e.g. NAME=document).
-# Usage: make render NAME=document
-render:
-	@test -n "$(NAME)" || { echo "NAME is required, e.g. make render NAME=document"; exit 1; }
-	npx tsx scripts/render-tree.tsx "$(NAME)"
+# Run the parser service with auto-reload for local development
+dev:
+	$(VENV)/uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-# Run both for the same FILE: parse, then render the same tree, so the JSON and HTML
-# can be compared side by side.
+# Run the parser service without reload (production-style)
+start:
+	$(VENV)/uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# Run the test suite
+test:
+	$(VENV)/pytest
+
+# Parse FILE and write out/<name>.json plus out/<name>.html, so the structured tree
+# and the way it renders in a browser can be checked side by side.
 # Usage: make debug FILE=path/to/document.pdf
 debug:
 	@test -n "$(FILE)" || { echo "FILE is required, e.g. make debug FILE=path/to/doc.pdf"; exit 1; }
-	$(MAKE) parse FILE="$(FILE)"
-	$(MAKE) render NAME="$(basename $(notdir $(FILE)))"
+	$(VENV)/python scripts/parse_file.py "$(FILE)"
+
+# Drop the debug output
+clean:
+	rm -rf out
