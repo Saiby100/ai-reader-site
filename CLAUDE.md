@@ -24,8 +24,17 @@ that tree to standalone HTML for debugging.
 
 ```
 app/
-  main.py         FastAPI app — routes (/health, /capabilities, /parse), bearer auth,
-                  upload validation. parse_document runs in a thread (it is CPU-bound).
+  main.py         app assembly only — logging, lifespan (model load), `app = FastAPI(…)`,
+                  error handlers, `include_router(api_router)`
+  logging.py      `configure_logging()` — the one `logging.basicConfig` call
+  api/
+    router.py     `api_router` — the single place every endpoint is registered
+    deps.py       `verify_auth` (bearer) and `validate_upload` (extension / size)
+    errors.py     HTTPException → `{"error": …}` JSON, via `register_error_handlers(app)`
+    routes/
+      health.py         GET  /health
+      capabilities.py   GET  /capabilities
+      parse.py          POST /parse — parse_document runs in a thread (it is CPU-bound)
   parser.py       all Docling work: converter setup, tree building, PDF link extraction,
                   ligature/PUA recovery. `parse_document(bytes, filename)` is the only
                   entry point; everything else is a `_`-prefixed helper.
@@ -38,6 +47,10 @@ tests/                  pytest
 
 ### Key patterns
 
+- **One file per endpoint.** Each module in `app/api/routes/` owns an `APIRouter` and
+  declares its own method/path decorator, so the verb, path, dependencies and response model
+  sit next to the handler. `app/api/router.py` is the central assembly file: adding an
+  endpoint means a new route file plus one `include_router` line. `main.py` never grows.
 - **One entry point per module boundary.** Nothing Docling-specific leaks past
   `parser.py` — no bounding boxes, no provenance objects. `models.py` is the boundary.
 - **Settings are read once.** Import `settings` from `app.config`; never call `Settings()`
