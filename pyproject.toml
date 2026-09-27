@@ -28,6 +28,7 @@ dev = [
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
-# Only the service package ships; scripts/ and tests/ stay development-only.
-[tool.setuptools]
-packages = ["app"]
+# Only the service package and its subpackages ship; scripts/ and tests/ stay
+# development-only.
+[tool.setuptools.packages.find]
+include = ["app*"]
