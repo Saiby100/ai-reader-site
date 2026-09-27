@@ -94,9 +94,13 @@ tests/                  pytest
 
 ## Testing
 
-- `tests/test_parser.py` builds hand-rolled fake Docling objects (`_Item`, `_Doc`, `_Prov`,
-  …) so unit tests run without loading models. Extend those fakes rather than importing
-  Docling in tests.
+- **Test files mirror the source modules**: `tests/test_tree.py`, `test_links.py`,
+  `test_ligatures.py` cover `app/parsing/`, and `test_api.py` covers the endpoints.
+- `tests/fakes.py` holds hand-rolled fake Docling objects (`_Item`, `_Doc`, `_Prov`, …) so
+  unit tests run without loading models. Extend those fakes rather than importing Docling in
+  tests. `tests/conftest.py` holds only the shared fixtures.
+- Unit tests import the code under test *inside* the test function, which is what keeps
+  Docling and the models out of a collection-only run.
 - `tests/test_render_html.py` builds `DocumentElement`s directly and asserts on the exact
   markup string.
 - Endpoint tests use FastAPI's `TestClient`. Note that importing `app.main` constructs
