@@ -6,7 +6,7 @@ import logging
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from ...models import ParseResponse
-from ...parser import parse_document
+from ...parsing import parse_document
 from ..deps import validate_upload, verify_auth
 
 logger = logging.getLogger(__name__)

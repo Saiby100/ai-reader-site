@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from .api.errors import register_error_handlers
 from .api.router import api_router
 from .logging import configure_logging
-from .parser import load_models
+from .parsing import load_models
 
 configure_logging()
 

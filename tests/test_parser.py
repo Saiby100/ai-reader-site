@@ -116,15 +116,15 @@ def _item_with_bbox(page_no: int, left: float, right: float, page_width: float):
 
 
 def test_enum_value_handles_enums_strings_and_none() -> None:
-    from app.parser import _enum_value
+    from app.parsing.tree import enum_value
 
-    assert _enum_value(_Enum("success")) == "success"
-    assert _enum_value("good") == "good"
-    assert _enum_value(None) is None
+    assert enum_value(_Enum("success")) == "success"
+    assert enum_value("good") == "good"
+    assert enum_value(None) is None
 
 
 def test_code_language_drops_unknown() -> None:
-    from app.parser import _code_language
+    from app.parsing.tree import _code_language
 
     assert _code_language(_Item(code_language=_Enum("Python"))) == "Python"
     assert _code_language(_Item(code_language=_Enum("unknown"))) is None
@@ -132,7 +132,7 @@ def test_code_language_drops_unknown() -> None:
 
 
 def test_element_meta_extracts_ref_page_label_charspan() -> None:
-    from app.parser import _element_meta
+    from app.parsing.tree import _element_meta
 
     item = _Item(
         self_ref="#/texts/12",
@@ -151,7 +151,7 @@ def test_element_meta_extracts_ref_page_label_charspan() -> None:
 
 
 def test_element_meta_tolerates_missing_provenance() -> None:
-    from app.parser import _element_meta
+    from app.parsing.tree import _element_meta
 
     meta = _element_meta(_Item(self_ref="#/texts/1"), _Doc())
     assert meta == {
@@ -165,7 +165,7 @@ def test_element_meta_tolerates_missing_provenance() -> None:
 
 
 def test_element_meta_extracts_external_hyperlink() -> None:
-    from app.parser import _element_meta
+    from app.parsing.tree import _element_meta
 
     class _Url:
         """Stand-in for Docling's AnyUrl, which stringifies to the href."""
@@ -180,7 +180,7 @@ def test_element_meta_extracts_external_hyperlink() -> None:
 
 
 def test_alignment_detects_center_right_and_default() -> None:
-    from app.parser import _alignment
+    from app.parsing.tree import _alignment
 
     # page width 100; symmetric 30-wide margins -> centered block (40..60)
     item, doc = _item_with_bbox(1, left=40, right=60, page_width=100)
@@ -196,7 +196,7 @@ def test_alignment_detects_center_right_and_default() -> None:
 
 
 def test_alignment_ignores_full_width_blocks() -> None:
-    from app.parser import _alignment
+    from app.parsing.tree import _alignment
 
     # spans 90% of the page -> ordinary body/justified text, not a deliberate alignment
     item, doc = _item_with_bbox(1, left=5, right=95, page_width=100)
@@ -204,7 +204,7 @@ def test_alignment_ignores_full_width_blocks() -> None:
 
 
 def test_alignment_returns_none_without_geometry() -> None:
-    from app.parser import _alignment
+    from app.parsing.tree import _alignment
 
     # no provenance at all (e.g. DOCX/HTML/MD inputs)
     assert _alignment(_Item(self_ref="#/texts/1"), _Doc()) is None
@@ -228,7 +228,7 @@ def _el(**kwargs: object):
 
 
 def test_collect_pua_counts_across_tree_and_fields() -> None:
-    from app.parser import _collect_pua
+    from app.parsing.ligatures import _collect_pua
 
     tree = [
         _el(text=f"O{PUA_FT}en and A{PUA_FR}ica"),
@@ -246,7 +246,7 @@ def test_collect_pua_counts_across_tree_and_fields() -> None:
 
 
 def test_apply_glyph_map_strips_pads_keeps_boundaries_and_clears_charspan() -> None:
-    from app.parser import _apply_glyph_map
+    from app.parsing.ligatures import _apply_glyph_map
 
     mapping = {PUA_FT: "ft", PUA_FR: "fr"}
     # Raw-layer truth (prefix, suffix) per glyph; empty side == real word boundary there.
@@ -272,7 +272,7 @@ def test_apply_glyph_map_strips_pads_keeps_boundaries_and_clears_charspan() -> N
 
 
 def test_apply_glyph_map_without_boundary_data_never_fuses_words() -> None:
-    from app.parser import _apply_glyph_map
+    from app.parsing.ligatures import _apply_glyph_map
 
     # With no raw-layer data, a flanking space is kept rather than risk joining two words.
     # This is the word-initial shape Docling actually emits (leading boundary, no trailing pad).
@@ -282,7 +282,7 @@ def test_apply_glyph_map_without_boundary_data_never_fuses_words() -> None:
 
 
 def test_apply_glyph_map_recurses_into_children() -> None:
-    from app.parser import _apply_glyph_map
+    from app.parsing.ligatures import _apply_glyph_map
 
     glyph_words = {PUA_FR: [("a", "ica")], PUA_FT: [("o", "en")]}  # 'Africa', 'Often'
     parent = _el(text=f"A{PUA_FR}ica", children=[_el(text=f"O{PUA_FT}en")])
@@ -292,7 +292,7 @@ def test_apply_glyph_map_recurses_into_children() -> None:
 
 
 def test_contiguous_ranges_collapses_runs() -> None:
-    from app.parser import _contiguous_ranges
+    from app.parsing.ligatures import _contiguous_ranges
 
     assert _contiguous_ranges([5, 6, 7, 40]) == [(5, 7), (40, 40)]
     assert _contiguous_ranges([40, 5, 6]) == [(5, 6), (40, 40)]
@@ -309,37 +309,37 @@ def _link_item(page_no: int, left: float, top: float, right: float, bottom: floa
 
 
 def test_match_link_binds_element_covered_by_link() -> None:
-    from app.parser import _match_link
+    from app.parsing.links import match_link
 
     # element bbox sits fully inside the link rect -> coverage 1.0 -> target page bound
     item, doc = _link_item(1, left=72, top=79, right=176, bottom=96)
     links = {1: [((72.0, 72.0, 220.0, 97.0), 2)]}
-    assert _match_link(item, doc, links) == 2
+    assert match_link(item, doc, links) == 2
 
 
 def test_match_link_skips_below_threshold() -> None:
-    from app.parser import _match_link
+    from app.parsing.links import match_link
 
     # link grazes only a small slice of the element -> below 0.5 coverage -> no bind
     item, doc = _link_item(1, left=72, top=79, right=200, bottom=96)
     links = {1: [((180.0, 79.0, 220.0, 96.0), 2)]}
-    assert _match_link(item, doc, links) is None
+    assert match_link(item, doc, links) is None
 
 
 def test_match_link_returns_none_without_matching_links_or_geometry() -> None:
-    from app.parser import _match_link
+    from app.parsing.links import match_link
 
     item, doc = _link_item(1, left=72, top=79, right=176, bottom=96)
     # empty map, and a link only on a different page
-    assert _match_link(item, doc, {}) is None
-    assert _match_link(item, doc, {2: [((0.0, 0.0, 500.0, 500.0), 3)]}) is None
+    assert match_link(item, doc, {}) is None
+    assert match_link(item, doc, {2: [((0.0, 0.0, 500.0, 500.0), 3)]}) is None
     # link present on the page, but the item carries no bbox
     no_bbox = _Item(prov=[_Prov(page_no=1, charspan=(0, 1))])
-    assert _match_link(no_bbox, doc, {1: [((0.0, 0.0, 500.0, 500.0), 2)]}) is None
+    assert match_link(no_bbox, doc, {1: [((0.0, 0.0, 500.0, 500.0), 2)]}) is None
 
 
 def test_coverage_is_fraction_of_inner_overlapped() -> None:
-    from app.parser import _coverage
+    from app.parsing.links import _coverage
 
     # inner fully inside outer -> 1.0
     assert _coverage((10, 10, 20, 20), (0, 0, 100, 100)) == 1.0

@@ -35,9 +35,13 @@ app/
       health.py         GET  /health
       capabilities.py   GET  /capabilities
       parse.py          POST /parse — parse_document runs in a thread (it is CPU-bound)
-  parser.py       all Docling work: converter setup, tree building, PDF link extraction,
-                  ligature/PUA recovery. `parse_document(bytes, filename)` is the only
-                  entry point; everything else is a `_`-prefixed helper.
+  parsing/        all Docling work — nothing Docling-specific leaves this package
+    __init__.py   the public surface: parse_document / load_models / is_model_loaded
+    service.py    `parse_document(bytes, filename)` orchestration + response metadata
+    converter.py  Docling converter construction and lifecycle (incl. the OCR fallbacks)
+    tree.py       Docling document → `DocumentElement` tree
+    links.py      PDF /GoTo link extraction and bbox-overlap matching
+    ligatures.py  PUA glyph recovery + the full-page-OCR backstop
   models.py       the wire contract (pydantic) — ParseResponse / DocumentElement / …
   render_html.py  document tree → standalone HTML
   config.py       pydantic-settings `Settings`, exported as the module-level `settings`
@@ -52,11 +56,13 @@ tests/                  pytest
   sit next to the handler. `app/api/router.py` is the central assembly file: adding an
   endpoint means a new route file plus one `include_router` line. `main.py` never grows.
 - **One entry point per module boundary.** Nothing Docling-specific leaks past
-  `parser.py` — no bounding boxes, no provenance objects. `models.py` is the boundary.
+  `app/parsing/__init__.py` — no bounding boxes, no provenance objects. `models.py` is the
+  boundary. Inside the package the imports form a DAG (`service` → everything; `ligatures`
+  → `converter`/`tree`/`links`; `tree` → `links`); keep it acyclic.
 - **Settings are read once.** Import `settings` from `app.config`; never call `Settings()`
   again. Unknown keys in `.env` are rejected at startup.
 - **Lazy heavy objects.** The converter and OCR engines are module-level globals built on
-  first use (`load_models`, `_get_ocr_converter`, `_get_ocr_engine`) so importing the
+  first use (`load_models`, `get_ocr_converter`, `get_ocr_engine`) so importing the
   package stays cheap.
 - **Renderer registry.** `render_html.RENDERERS` maps every `ElementType` to a function; a
   module-level assert against `get_args(ElementType)` makes a missing renderer an import

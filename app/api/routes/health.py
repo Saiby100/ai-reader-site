@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from ...parser import is_model_loaded
+from ...parsing import is_model_loaded
 
 router = APIRouter()
 

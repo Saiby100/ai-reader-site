@@ -2,7 +2,7 @@
 """Parse a single document to JSON and standalone HTML, then exit.
 
 Loads the (slow) Docling models, parses the file at the given path via
-``app.parser.parse_document``, prints a short summary, and writes both the full
+``app.parsing.parse_document``, prints a short summary, and writes both the full
 ``ParseResponse`` JSON and a browser-openable HTML rendering of it to ``out/`` at the repo
 root. Open the HTML to see how the parse actually renders.
 
@@ -23,7 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from app.models import ParseResponse  # noqa: E402
-from app.parser import load_models, parse_document  # noqa: E402
+from app.parsing import load_models, parse_document  # noqa: E402
 from app.render_html import render_page  # noqa: E402
 
 OUTPUT_DIR = REPO_ROOT / "out"
